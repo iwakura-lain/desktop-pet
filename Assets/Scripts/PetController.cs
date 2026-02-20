@@ -15,6 +15,7 @@ public class PetController : MonoBehaviour
     // -------------------------------------------------------------------------
     [Header("References")]
     [SerializeField] private WindowManager windowManager;
+    [SerializeField] private ContextMenuHandler contextMenu;
 
     [Header("Behaviour")]
     [SerializeField] private float clickResetDelay = 1.5f;
@@ -36,6 +37,9 @@ public class PetController : MonoBehaviour
         // Auto-find WindowManager if not assigned
         if (windowManager == null)
             windowManager = FindFirstObjectByType<WindowManager>();
+
+        if (contextMenu == null)
+            contextMenu = GetComponent<ContextMenuHandler>();
     }
 
     private void Start()
@@ -75,6 +79,14 @@ public class PetController : MonoBehaviour
 
     public void OnPointerDown()
     {
+        // Right-click → context menu
+        if (Input.GetMouseButton(1))
+        {
+            Vector2 mp = Input.mousePosition;
+            contextMenu?.ShowAt(new Vector2(mp.x, Screen.height - mp.y));
+            return;
+        }
+        contextMenu?.Hide();
         TransitionTo(PetState.Dragging);
         windowManager?.BeginDrag();
     }

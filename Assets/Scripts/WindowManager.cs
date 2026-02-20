@@ -147,4 +147,17 @@ public class WindowManager : MonoBehaviour
     }
 
     public void EndDrag() => _isDragging = false;
+
+    /// <summary>Show or hide the window (used by TrayIconManager).</summary>
+    public void SetVisible(bool visible)
+    {
+        if (_hwnd == IntPtr.Zero) return;
+        int style = GetWindowLong(_hwnd, GWL_STYLE);
+        if (visible)
+            SetWindowLong(_hwnd, GWL_STYLE, style | WS_VISIBLE);
+        else
+            SetWindowLong(_hwnd, GWL_STYLE, style & ~WS_VISIBLE);
+        SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOSIZE | SWP_NOMOVE | SWP_FRAMECHANGED);
+    }
 }
