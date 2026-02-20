@@ -28,10 +28,11 @@ public class WindowManager : MonoBehaviour
     private const uint LWA_COLORKEY    = 0x00000001;
     private const uint LWA_ALPHA       = 0x00000002;
 
-    // Use #010101 as colorkey — Unity clears to pure black #000000.
-    // We set the camera clear color to #010101 so it is punched through,
-    // while any sprite pixel that is #000000 stays visible.
-    private const uint COLORKEY = 0x00010101;
+    // Use pure black #000000 as colorkey. With preserveFramebufferAlpha=1,
+    // Unity renders the background as transparent; the colorkey punches
+    // through any remaining black pixels. Sprite outlines use deep purple
+    // so they are never eaten by the colorkey.
+    private const uint COLORKEY = 0x00000000;
 
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
 
