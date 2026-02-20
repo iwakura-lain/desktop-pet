@@ -68,16 +68,10 @@ public class PetController : MonoBehaviour
     }
 
     // -------------------------------------------------------------------------
-    // Input (called from Unity Event System / 2D Collider + Physics Raycaster)
+    // Input — uses OnMouseDown/OnMouseUp (works with 2D Collider automatically)
     // -------------------------------------------------------------------------
 
-    public void OnPetClicked()
-    {
-        if (_state == PetState.Dragging) return;
-        TransitionTo(PetState.Clicked);
-    }
-
-    public void OnPointerDown()
+    private void OnMouseDown()
     {
         // Right-click → context menu
         if (Input.GetMouseButton(1))
@@ -91,10 +85,14 @@ public class PetController : MonoBehaviour
         windowManager?.BeginDrag();
     }
 
-    public void OnPointerUp()
+    private void OnMouseUp()
     {
-        windowManager?.EndDrag();
-        TransitionTo(PetState.Idle);
+        if (_state == PetState.Dragging)
+        {
+            windowManager?.EndDrag();
+            TransitionTo(PetState.Clicked);
+            _clickTimer = clickResetDelay;
+        }
     }
 
     // -------------------------------------------------------------------------

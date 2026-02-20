@@ -20,7 +20,7 @@ public class PetBootstrap : MonoBehaviour
 
         // BoxCollider2D (for click detection)
         var col = pet.AddComponent<BoxCollider2D>();
-        col.size = new Vector2(2.56f, 2.56f); // matches 256px at 100 PPU
+        col.size = new Vector2(1.28f, 1.28f); // matches 128px at 100 PPU
 
         // AnimationController
         var anim = pet.AddComponent<AnimationController>();

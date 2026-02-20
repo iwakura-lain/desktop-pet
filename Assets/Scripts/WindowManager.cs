@@ -4,18 +4,23 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 
 /// <summary>
-/// Minimal window manager — borderless, always-on-top, draggable.
-/// Transparency is intentionally NOT applied here; the window renders
-/// with a solid dark background so the pet is always visible.
-/// A future version can add DWM transparency once rendering is confirmed working.
+/// Window manager — borderless, always-on-top, transparent background, draggable.
+/// Uses colorkey transparency: camera background is set to a magic color (magenta),
+/// and SetLayeredWindowAttributes makes that color transparent.
 /// </summary>
 public class WindowManager : MonoBehaviour
 {
+    // The colorkey color — must match camera background exactly
+    // Using RGB(1, 0, 1) — nearly black magenta, won't appear in normal sprites
+    public static readonly Color32 ColorKey = new Color32(1, 0, 1, 255);
+
     private const int GWL_STYLE   = -16;
     private const int GWL_EXSTYLE = -20;
     private const int WS_POPUP    = unchecked((int)0x80000000);
     private const int WS_VISIBLE  = 0x10000000;
-    private const int WS_EX_TOPMOST = 0x00000008;
+    private const int WS_EX_TOPMOST  = 0x00000008;
+    private const int WS_EX_LAYERED  = 0x00080000;
+    private const int LWA_COLORKEY   = 0x00000001;
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_FRAMECHANGED = 0x0020;
@@ -27,6 +32,7 @@ public class WindowManager : MonoBehaviour
     [DllImport("user32.dll")] private static extern int  SetWindowLong(IntPtr h, int n, int v);
     [DllImport("user32.dll")] private static extern int  GetWindowLong(IntPtr h, int n);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
+    [DllImport("user32.dll")] private static extern bool SetLayeredWindowAttributes(IntPtr h, uint key, byte alpha, uint flags);
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] private static extern bool MoveWindow(IntPtr h, int x, int y, int w, int ht, bool rep);
@@ -45,6 +51,13 @@ public class WindowManager : MonoBehaviour
     private void Start()
     {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        // Set camera background to colorkey color
+        Camera cam = Camera.main;
+        if (cam != null)
+        {
+            cam.backgroundColor = new Color(ColorKey.r / 255f, ColorKey.g / 255f, ColorKey.b / 255f, 1f);
+            cam.clearFlags = CameraClearFlags.SolidColor;
+        }
         StartCoroutine(InitWindow());
 #endif
     }
@@ -65,14 +78,24 @@ public class WindowManager : MonoBehaviour
         }
         if (_hwnd == IntPtr.Zero) yield break;
 
-        // Only strip border and set topmost — NO transparency/layered flags
+        ApplyWindowStyle();
+    }
+
+    public void ApplyWindowStyle()
+    {
+        if (_hwnd == IntPtr.Zero) return;
+
+        // Borderless popup
         SetWindowLong(_hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
-        SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST);
+        // Layered + topmost
+        SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST | WS_EX_LAYERED);
+        // Colorkey transparency: RGB(1, 0, 1)
+        uint colorRef = (uint)ColorKey.r | ((uint)ColorKey.g << 8) | ((uint)ColorKey.b << 16);
+        SetLayeredWindowAttributes(_hwnd, colorRef, 0, LWA_COLORKEY);
+        // Apply
         SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOSIZE | SWP_NOMOVE | SWP_FRAMECHANGED);
     }
-
-    public void ApplyWindowStyle() { } // stub for TrayIconManager
 
     public void SetVisible(bool visible)
     {
