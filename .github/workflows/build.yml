@@ -37,6 +37,8 @@ jobs:
           targetPlatform:  StandaloneWindows64
           buildName:       desktop-pet
           buildsPath:      build
+          customParameters: -nographics -buildTarget StandaloneWindows64
+          sceneList:       Assets/Scenes/Main.unity
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
