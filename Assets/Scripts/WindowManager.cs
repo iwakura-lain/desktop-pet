@@ -11,8 +11,8 @@ using UnityEngine;
 public class WindowManager : MonoBehaviour
 {
     // The colorkey color — must match camera background exactly
-    // Using RGB(1, 0, 1) — nearly black magenta, won't appear in normal sprites
-    public static readonly Color32 ColorKey = new Color32(1, 0, 1, 255);
+    // Using bright magenta RGB(255, 0, 255) — classic chroma key, not used in sprites
+    public static readonly Color32 ColorKey = new Color32(255, 0, 255, 255);
 
     private const int GWL_STYLE   = -16;
     private const int GWL_EXSTYLE = -20;
