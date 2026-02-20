@@ -64,6 +64,14 @@ public class AnimationController : MonoBehaviour
     // Public API
     // -------------------------------------------------------------------------
 
+    /// <summary>Inject clips programmatically (called by RuntimeSpriteLoader).</summary>
+    public void SetClipsAtRuntime(List<AnimClip> newClips, string startClip)
+    {
+        clips = newClips;
+        defaultClip = startClip;
+        PlayState(startClip);
+    }
+
     /// <summary>Switch to named clip. No-op if already playing same clip.</summary>
     public void PlayState(string clipName)
     {

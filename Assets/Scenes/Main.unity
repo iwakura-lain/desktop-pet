@@ -183,6 +183,7 @@ GameObject:
   - component: {fileID: 200000008}
   - component: {fileID: 200000009}
   - component: {fileID: 200000010}
+  - component: {fileID: 200000011}
   m_Layer: 0
   m_Name: Pet
   m_TagString: Untagged
@@ -339,6 +340,18 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   tooltipText: Desktop Pet
+--- !u!114 &200000011
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 200000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
 --- !u!1 &705507177
 GameObject:
   m_ObjectHideFlags: 0
