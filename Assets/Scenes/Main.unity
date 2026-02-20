@@ -1,0 +1,25 @@
+# Main.unity — Placeholder
+
+This file is a placeholder. The actual Unity scene binary must be generated
+by Unity Editor 6 LTS (6000.0.x).
+
+## Scene Setup Instructions (Unity Editor)
+
+1. Open the project in Unity 6 LTS.
+2. Create a new scene: File → New Scene → Basic (Built-in) → Save as `Assets/Scenes/Main.unity`.
+3. **Camera settings** (for transparent background):
+   - Clear Flags: Solid Color
+   - Background: #000000 with Alpha = 0  (matches WindowManager colour key)
+   - Projection: Orthographic
+4. **URP Asset** — ensure the URP pipeline asset has `Transparent Background` support.
+   (Project Settings → Graphics → Scriptable Render Pipeline Asset)
+5. Add an empty GameObject named `PetRoot`:
+   - Add `SpriteRenderer` component (assign your idle sprite).
+   - Add `PetController` script.
+   - Add `AnimationController` script (configure clips in inspector).
+   - Add `PolygonCollider2D` or `BoxCollider2D` (for click detection).
+6. Add another empty GameObject named `WindowManager`:
+   - Add `WindowManager` script.
+   - Drag the reference into `PetController → Window Manager` field.
+7. Add an `EventSystem` and a `Physics 2D Raycaster` on the Camera for mouse input.
+8. Save the scene and build: File → Build Settings → Windows x86_64 → Build.
