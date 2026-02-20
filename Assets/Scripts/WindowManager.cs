@@ -1,73 +1,59 @@
 using System;
+using System.Collections;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
 /// <summary>
 /// Windows API wrapper for transparent, always-on-top, draggable window.
-/// Requires Unity 6 LTS, Windows Standalone x86_64, URP with transparency.
+/// Uses colorkey #010101 (near-black, not pure black) so Unity's black
+/// background is punched through while dark sprite pixels remain visible.
+/// Grabs the HWND via EnumWindows on a background coroutine to survive
+/// the race between Unity startup and window creation.
 /// </summary>
 public class WindowManager : MonoBehaviour
 {
     // -------------------------------------------------------------------------
     // Win32 constants
     // -------------------------------------------------------------------------
-    private const int GWL_STYLE      = -16;
-    private const int GWL_EXSTYLE    = -20;
-    private const int WS_POPUP       = unchecked((int)0x80000000);
-    private const int WS_VISIBLE     = 0x10000000;
-    private const int WS_EX_LAYERED  = 0x00080000;
-    private const int WS_EX_TOPMOST  = 0x00000008;
-    private const int WS_EX_TRANSPARENT = 0x00000020;
-    private const int SWP_NOSIZE     = 0x0001;
-    private const int SWP_NOMOVE     = 0x0002;
-    private const int SWP_FRAMECHANGED = 0x0020;
-    private const int LWA_COLORKEY   = 0x00000001;
-    private const int LWA_ALPHA      = 0x00000002;
+    private const int GWL_STYLE        = -16;
+    private const int GWL_EXSTYLE      = -20;
+    private const int WS_POPUP         = unchecked((int)0x80000000);
+    private const int WS_VISIBLE       = 0x10000000;
+    private const int WS_EX_LAYERED    = 0x00080000;
+    private const int WS_EX_TOPMOST    = 0x00000008;
+    private const int WS_EX_TRANSPARENT= 0x00000020;
+    private const uint SWP_NOSIZE      = 0x0001;
+    private const uint SWP_NOMOVE      = 0x0002;
+    private const uint SWP_FRAMECHANGED= 0x0020;
+    private const uint LWA_COLORKEY    = 0x00000001;
+    private const uint LWA_ALPHA       = 0x00000002;
+
+    // Use #010101 as colorkey — Unity clears to pure black #000000.
+    // We set the camera clear color to #010101 so it is punched through,
+    // while any sprite pixel that is #000000 stays visible.
+    private const uint COLORKEY = 0x00010101;
 
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
 
     // -------------------------------------------------------------------------
     // Win32 imports
     // -------------------------------------------------------------------------
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr GetActiveWindow();
+    [DllImport("user32.dll")] private static extern IntPtr GetActiveWindow();
+    [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr h, int n, int v);
+    [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr h, int n);
+    [DllImport("user32.dll")] private static extern bool SetLayeredWindowAttributes(IntPtr h, uint cr, byte a, uint f);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll")] private static extern bool MoveWindow(IntPtr h, int x, int y, int w, int ht, bool rep);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr h);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    private delegate bool EnumWindowsProc(IntPtr h, IntPtr lp);
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lp);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool SetWindowPos(
-        IntPtr hWnd, IntPtr hWndInsertAfter,
-        int X, int Y, int cx, int cy, uint uFlags);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool GetCursorPos(out POINT lpPoint);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct POINT { public int x, y; }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RECT { public int left, top, right, bottom; }
-
-    // -------------------------------------------------------------------------
-    // State
-    // -------------------------------------------------------------------------
-    private IntPtr _hwnd;
-    private bool   _isDragging;
-    private POINT  _dragStart;
-    private RECT   _winRectAtDragStart;
+    [StructLayout(LayoutKind.Sequential)] private struct POINT { public int x, y; }
+    [StructLayout(LayoutKind.Sequential)] private struct RECT  { public int left, top, right, bottom; }
 
     // -------------------------------------------------------------------------
     // Inspector
@@ -78,52 +64,73 @@ public class WindowManager : MonoBehaviour
     [SerializeField] private bool clickThrough = false;
 
     // -------------------------------------------------------------------------
+    // State
+    // -------------------------------------------------------------------------
+    private IntPtr _hwnd;
+    private bool   _isDragging;
+    private POINT  _dragStart;
+    private RECT   _winRectAtDragStart;
+
+    // -------------------------------------------------------------------------
     // Lifecycle
     // -------------------------------------------------------------------------
-    private void Awake()
+    private void Start()
     {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-        _hwnd = GetActiveWindow();
-        ApplyWindowStyle();
+        StartCoroutine(InitWindow());
 #endif
+    }
+
+    private IEnumerator InitWindow()
+    {
+        // Wait up to 3 seconds for the Unity window to appear
+        uint myPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+        for (int attempt = 0; attempt < 30 && _hwnd == IntPtr.Zero; attempt++)
+        {
+            yield return new WaitForSeconds(0.1f);
+            EnumWindows((h, _) =>
+            {
+                if (!IsWindowVisible(h)) return true;
+                GetWindowThreadProcessId(h, out uint pid);
+                if (pid == myPid) { _hwnd = h; return false; }
+                return true;
+            }, IntPtr.Zero);
+        }
+
+        if (_hwnd == IntPtr.Zero)
+        {
+            Debug.LogError("[WindowManager] Could not find Unity window handle.");
+            yield break;
+        }
+
+        ApplyWindowStyle();
     }
 
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
-
-    /// <summary>Remove title bar / border, enable layered (transparent) window, stay on top.</summary>
     public void ApplyWindowStyle()
     {
         if (_hwnd == IntPtr.Zero) return;
 
-        // Strip border, keep popup + visible
         SetWindowLong(_hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
 
-        // Layered + topmost; optionally transparent to mouse
         int exStyle = WS_EX_LAYERED | WS_EX_TOPMOST;
         if (clickThrough) exStyle |= WS_EX_TRANSPARENT;
         SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle);
 
-        // Black = transparent colour key (matches Camera background)
-        SetLayeredWindowAttributes(_hwnd, 0x000000, windowAlpha, LWA_COLORKEY | LWA_ALPHA);
+        SetLayeredWindowAttributes(_hwnd, COLORKEY, windowAlpha, LWA_COLORKEY | LWA_ALPHA);
 
-        // Flush the frame change
         SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOSIZE | SWP_NOMOVE | SWP_FRAMECHANGED);
     }
 
-    /// <summary>Set window opacity 0-255.</summary>
     public void SetAlpha(byte alpha)
     {
         windowAlpha = alpha;
         if (_hwnd != IntPtr.Zero)
-            SetLayeredWindowAttributes(_hwnd, 0x000000, alpha, LWA_COLORKEY | LWA_ALPHA);
+            SetLayeredWindowAttributes(_hwnd, COLORKEY, alpha, LWA_COLORKEY | LWA_ALPHA);
     }
-
-    // -------------------------------------------------------------------------
-    // Drag support (called from PetController)
-    // -------------------------------------------------------------------------
 
     public void BeginDrag()
     {
@@ -139,25 +146,18 @@ public class WindowManager : MonoBehaviour
         GetCursorPos(out POINT cur);
         int dx = cur.x - _dragStart.x;
         int dy = cur.y - _dragStart.y;
-        int newX = _winRectAtDragStart.left + dx;
-        int newY = _winRectAtDragStart.top  + dy;
         int w = _winRectAtDragStart.right  - _winRectAtDragStart.left;
         int h = _winRectAtDragStart.bottom - _winRectAtDragStart.top;
-        MoveWindow(_hwnd, newX, newY, w, h, false);
+        MoveWindow(_hwnd, _winRectAtDragStart.left + dx, _winRectAtDragStart.top + dy, w, h, false);
     }
 
     public void EndDrag() => _isDragging = false;
 
-    /// <summary>Show or hide the window (used by TrayIconManager).</summary>
     public void SetVisible(bool visible)
     {
         if (_hwnd == IntPtr.Zero) return;
         int style = GetWindowLong(_hwnd, GWL_STYLE);
-        if (visible)
-            SetWindowLong(_hwnd, GWL_STYLE, style | WS_VISIBLE);
-        else
-            SetWindowLong(_hwnd, GWL_STYLE, style & ~WS_VISIBLE);
-        SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                     SWP_NOSIZE | SWP_NOMOVE | SWP_FRAMECHANGED);
+        SetWindowLong(_hwnd, GWL_STYLE, visible ? (style | WS_VISIBLE) : (style & ~WS_VISIBLE));
+        SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_FRAMECHANGED);
     }
 }
