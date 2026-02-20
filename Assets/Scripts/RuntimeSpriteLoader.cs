@@ -3,20 +3,15 @@ using UnityEngine;
 
 /// <summary>
 /// Loads sprite-sheet PNGs from Resources/Sprites/ at runtime and populates
-/// AnimationController clips. This avoids any Editor-Inspector binding so the
-/// build works out-of-the-box without manual asset setup.
-///
-/// Expected files in Assets/Resources/Sprites/:
-///   catgirl_idle.png    — 512x128, 4 frames (128x128 each)
-///   catgirl_clicked.png — 512x128, 4 frames
-///   catgirl_drag.png    — 512x128, 4 frames
+/// AnimationController clips. Runs in Awake so clips are ready before Start.
 /// </summary>
 [RequireComponent(typeof(AnimationController))]
 public class RuntimeSpriteLoader : MonoBehaviour
 {
-    private const int FrameWidth  = 128;
-    private const int FrameHeight = 128;
-    private const int FrameCount  = 4;
+    private const int FrameW  = 128;
+    private const int FrameH  = 128;
+    private const int FrameN  = 4;
+    private const float PPU   = 100f;
 
     private void Awake()
     {
@@ -24,48 +19,44 @@ public class RuntimeSpriteLoader : MonoBehaviour
 
         var clips = new List<AnimationController.AnimClip>
         {
-            LoadClip("Sprites/catgirl_idle",    "Idle",    fps: 6f,  loop: true),
-            LoadClip("Sprites/catgirl_clicked", "Clicked", fps: 8f,  loop: true),
-            LoadClip("Sprites/catgirl_drag",    "Drag",    fps: 8f,  loop: true),
+            MakeClip("Sprites/catgirl_idle",    "Idle",    6f,  true),
+            MakeClip("Sprites/catgirl_clicked", "Clicked", 8f,  true),
+            MakeClip("Sprites/catgirl_drag",    "Drag",    8f,  true),
         };
 
-        anim.SetClipsAtRuntime(clips, "Idle");
+        // Filter out any clips that failed to load
+        clips.RemoveAll(c => c.frames == null || c.frames.Length == 0);
+
+        if (clips.Count == 0)
+        {
+            Debug.LogError("[RuntimeSpriteLoader] No sprite clips loaded! " +
+                           "Check that Assets/Resources/Sprites/ PNGs exist with correct .meta files.");
+            return;
+        }
+
+        anim.SetClipsAtRuntime(clips, clips[0].name);
     }
 
-    private static AnimationController.AnimClip LoadClip(
-        string resourcePath, string clipName, float fps, bool loop)
+    private static AnimationController.AnimClip MakeClip(
+        string path, string name, float fps, bool loop)
     {
-        // Load the full sprite sheet texture
-        Texture2D sheet = Resources.Load<Texture2D>(resourcePath);
-        if (sheet == null)
+        // Load as Texture2D (meta sets isReadable=1 and textureType=8/Sprite)
+        var tex = Resources.Load<Texture2D>(path);
+        if (tex == null)
         {
-            Debug.LogError($"[RuntimeSpriteLoader] Could not load: Resources/{resourcePath}");
-            return new AnimationController.AnimClip
-            {
-                name   = clipName,
-                frames = new Sprite[0],
-                fps    = fps,
-                loop   = loop
-            };
+            Debug.LogError($"[RuntimeSpriteLoader] Failed to load: Resources/{path}");
+            return new AnimationController.AnimClip { name = name, frames = new Sprite[0], fps = fps, loop = loop };
         }
 
-        // Slice into individual frames left-to-right
-        var frames = new Sprite[FrameCount];
-        for (int i = 0; i < FrameCount; i++)
+        var frames = new Sprite[FrameN];
+        for (int i = 0; i < FrameN; i++)
         {
-            Rect rect = new Rect(i * FrameWidth, 0, FrameWidth, FrameHeight);
-            frames[i] = Sprite.Create(
-                sheet, rect,
-                pivot: new Vector2(0.5f, 0.5f),
-                pixelsPerUnit: 100f);
+            // Unity UV origin is bottom-left; sprite sheet frames go left→right
+            // so frame i starts at x = i*FrameW, y = 0 (bottom of texture)
+            var rect = new Rect(i * FrameW, 0, FrameW, FrameH);
+            frames[i] = Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f), PPU);
         }
 
-        return new AnimationController.AnimClip
-        {
-            name   = clipName,
-            frames = frames,
-            fps    = fps,
-            loop   = loop
-        };
+        return new AnimationController.AnimClip { name = name, frames = frames, fps = fps, loop = loop };
     }
 }
