@@ -159,17 +159,14 @@ public class TrayIconManager : MonoBehaviour
         // Fill AND mask with 0xFF (transparent), XOR with 0 initially
         for (int i = 0; i < andMask.Length; i++) andMask[i] = 0xFF;
 
-        // Draw a simple 8x8 square in the centre (rows 4-11, cols 4-11)
+        // Draw a simple 8x8 square in the centre (rows 4-11, cols 4-11).
+        // AND=0 + XOR=1 → white pixel visible; AND=1 + XOR=0 → transparent.
         for (int row = 4; row < 12; row++)
         {
-            // Columns 4-11 → bits 4-11 of the row
-            // In a monochrome bitmap, bit 7 = leftmost pixel
-            // AND=0 + XOR=1 → white pixel shown
-            andMask[row * stride] &= 0xF0; // clear bits for col 0-3 — keep transparent
-            andMask[row * stride] &= ~(byte)0x0F; // cols 4-7: AND=0 → opaque
-            xorMask[row * stride]  =  0x0F;       // cols 4-7: XOR=1 → white
-            andMask[row * stride + 1] &= ~(byte)0xF0; // cols 8-11: AND=0
-            xorMask[row * stride + 1]  =  0xF0;       // cols 8-11: XOR=1
+            andMask[row * stride]     = 0x00; // cols 0-7: opaque
+            xorMask[row * stride]     = 0xFF; // cols 0-7: white
+            andMask[row * stride + 1] = 0x00; // cols 8-15: opaque
+            xorMask[row * stride + 1] = 0xFF; // cols 8-15: white
         }
 
         return CreateIcon(IntPtr.Zero, 16, 16, 1, 1, andMask, xorMask);
