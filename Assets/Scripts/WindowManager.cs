@@ -5,32 +5,43 @@ using UnityEngine;
 
 /// <summary>
 /// Window manager — borderless, always-on-top, transparent background, draggable.
-/// Uses colorkey transparency: camera background is set to a magic color (magenta),
-/// and SetLayeredWindowAttributes makes that color transparent.
+/// Uses DWM sheet-of-glass + WS_EX_LAYERED colorkey for full transparency.
+/// Camera clears to solid black with alpha=0; DWM composites the transparent region.
 /// </summary>
 public class WindowManager : MonoBehaviour
 {
-    // The colorkey color — must match camera background exactly
-    // Using bright magenta RGB(255, 0, 255) — classic chroma key, not used in sprites
-    public static readonly Color32 ColorKey = new Color32(255, 0, 255, 255);
-
     private const int GWL_STYLE   = -16;
     private const int GWL_EXSTYLE = -20;
     private const int WS_POPUP    = unchecked((int)0x80000000);
     private const int WS_VISIBLE  = 0x10000000;
-    private const int WS_EX_TOPMOST  = 0x00000008;
-    private const int WS_EX_LAYERED  = 0x00080000;
-    private const int LWA_COLORKEY   = 0x00000001;
+    private const int WS_EX_TOPMOST    = 0x00000008;
+    private const int WS_EX_LAYERED    = 0x00080000;
+    private const int WS_EX_TRANSPARENT = 0x00000020;
+    private const int LWA_COLORKEY = 0x00000001;
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_FRAMECHANGED = 0x0020;
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MARGINS { public int left, right, top, bottom; }
+
     [StructLayout(LayoutKind.Sequential)] private struct POINT { public int x, y; }
     [StructLayout(LayoutKind.Sequential)] private struct RECT  { public int left, top, right, bottom; }
 
-    [DllImport("user32.dll")] private static extern int  SetWindowLong(IntPtr h, int n, int v);
-    [DllImport("user32.dll")] private static extern int  GetWindowLong(IntPtr h, int n);
+    // Use SetWindowLongPtr for 64-bit compatibility
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr64(IntPtr h, int n, IntPtr v);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
+    private static extern int SetWindowLong32(IntPtr h, int n, int v);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr h, int n);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    private static extern int GetWindowLong32(IntPtr h, int n);
+
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
     [DllImport("user32.dll")] private static extern bool SetLayeredWindowAttributes(IntPtr h, uint key, byte alpha, uint flags);
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
@@ -40,6 +51,9 @@ public class WindowManager : MonoBehaviour
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
     [DllImport("user32.dll")] private static extern int  ShowWindow(IntPtr h, int cmd);
 
+    [DllImport("dwmapi.dll")] private static extern int DwmExtendFrameIntoClientArea(IntPtr h, ref MARGINS m);
+    [DllImport("dwmapi.dll")] private static extern int DwmIsCompositionEnabled(out bool enabled);
+
     private delegate bool EnumWindowsProc(IntPtr h, IntPtr lp);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lp);
 
@@ -48,15 +62,31 @@ public class WindowManager : MonoBehaviour
     private POINT  _dragStart;
     private RECT   _winRectAtDragStart;
 
+    private static void SetWindowLongSafe(IntPtr hwnd, int index, long value)
+    {
+        if (IntPtr.Size == 8)
+            SetWindowLongPtr64(hwnd, index, new IntPtr(value));
+        else
+            SetWindowLong32(hwnd, index, (int)value);
+    }
+
+    private static long GetWindowLongSafe(IntPtr hwnd, int index)
+    {
+        if (IntPtr.Size == 8)
+            return GetWindowLongPtr64(hwnd, index).ToInt64();
+        else
+            return GetWindowLong32(hwnd, index);
+    }
+
     private void Start()
     {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-        // Set camera background to colorkey color
+        // Camera: clear to solid color (black) — DWM will handle transparency
         Camera cam = Camera.main;
         if (cam != null)
         {
-            cam.backgroundColor = new Color(ColorKey.r / 255f, ColorKey.g / 255f, ColorKey.b / 255f, 1f);
             cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
         }
         StartCoroutine(InitWindow());
 #endif
@@ -85,14 +115,25 @@ public class WindowManager : MonoBehaviour
     {
         if (_hwnd == IntPtr.Zero) return;
 
-        // Borderless popup
-        SetWindowLong(_hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
-        // Layered + topmost
-        SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST | WS_EX_LAYERED);
-        // Colorkey transparency: RGB(1, 0, 1)
-        uint colorRef = (uint)ColorKey.r | ((uint)ColorKey.g << 8) | ((uint)ColorKey.b << 16);
-        SetLayeredWindowAttributes(_hwnd, colorRef, 0, LWA_COLORKEY);
-        // Apply
+        // 1) Borderless popup
+        SetWindowLongSafe(_hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+
+        // 2) Extended style: topmost + layered
+        SetWindowLongSafe(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST | WS_EX_LAYERED);
+
+        // 3) Set colorkey transparency — use black (0,0,0) as the key color
+        //    Camera background is black with alpha=0, so all background pixels are (0,0,0)
+        SetLayeredWindowAttributes(_hwnd, 0x00000000, 0, LWA_COLORKEY);
+
+        // 4) Also try DWM extend frame for per-pixel alpha
+        DwmIsCompositionEnabled(out bool dwmEnabled);
+        if (dwmEnabled)
+        {
+            MARGINS margins = new MARGINS { left = -1, right = -1, top = -1, bottom = -1 };
+            DwmExtendFrameIntoClientArea(_hwnd, ref margins);
+        }
+
+        // 5) Apply topmost + frame changes
         SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOSIZE | SWP_NOMOVE | SWP_FRAMECHANGED);
     }
