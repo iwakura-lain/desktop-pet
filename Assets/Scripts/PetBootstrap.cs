@@ -14,19 +14,12 @@ public class PetBootstrap : MonoBehaviour
         var pet = new GameObject("Pet");
         pet.layer = 0;
 
-        // SpriteRenderer
-        var sr = pet.AddComponent<SpriteRenderer>();
-        sr.sortingOrder = 0;
-
         // BoxCollider2D (for click detection)
         var col = pet.AddComponent<BoxCollider2D>();
-        col.size = new Vector2(1.28f, 1.28f); // matches 128px at 100 PPU
+        col.size = new Vector2(1f, 1f);
 
-        // AnimationController
-        var anim = pet.AddComponent<AnimationController>();
-
-        // RuntimeSpriteLoader — loads clips via EmbeddedSprites
-        pet.AddComponent<RuntimeSpriteLoader>();
+        // Live2DController — loads Natori model and drives motions
+        pet.AddComponent<Live2DController>();
 
         // ContextMenuHandler
         pet.AddComponent<ContextMenuHandler>();
