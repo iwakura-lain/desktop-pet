@@ -122,6 +122,13 @@ public class Live2DController : MonoBehaviour
         if (_model.GetComponent<CubismRenderController>() == null)
             _model.gameObject.AddComponent<CubismRenderController>();
 
+        // --- 3b. Fix alpha channel for DWM transparent window ---
+        // Default Cubism materials use _SrcAlpha=0/_DstAlpha=1, so the model
+        // never writes alpha into the framebuffer. DWM reads the framebuffer
+        // alpha to decide transparency, so alpha=0 makes the model invisible.
+        // Fix: set _SrcAlpha=1 (SrcAlpha) and _DstAlpha=10 (OneMinusSrcAlpha).
+        FixMaterialAlpha();
+
         // --- 4. Add motion playback components ---
         if (_model.GetComponent<CubismFadeController>() == null)
             _model.gameObject.AddComponent<CubismFadeController>();
@@ -139,6 +146,28 @@ public class Live2DController : MonoBehaviour
         PlayState("Idle");
 
         Debug.Log("[Live2DController] Natori model loaded successfully.");
+    }
+
+    private void FixMaterialAlpha()
+    {
+        // Cubism default materials write _SrcAlpha=0, _DstAlpha=1 into the
+        // alpha channel blend, meaning the model never contributes alpha to
+        // the framebuffer. DWM transparent windows rely on framebuffer alpha
+        // to determine per-pixel transparency, so the model appears invisible.
+        //
+        // Unity BlendMode enum values:
+        //   1 = One, 5 = SrcAlpha, 10 = OneMinusSrcAlpha
+        // We set alpha blend to: src*SrcAlpha + dst*OneMinusSrcAlpha (normal alpha blend)
+        var renderers = _model.GetComponentsInChildren<CubismRenderer>(includeInactive: true);
+        foreach (var r in renderers)
+        {
+            var mat = r.Material;
+            if (mat == null) continue;
+            mat = new Material(mat); // clone to avoid modifying shared asset
+            mat.SetInt("_SrcAlpha", 5);  // SrcAlpha
+            mat.SetInt("_DstAlpha", 10); // OneMinusSrcAlpha
+            r.Material = mat;
+        }
     }
 
     private AnimationClip LoadMotionClip(string motionName, bool loop)
