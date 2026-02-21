@@ -9,13 +9,13 @@ using UnityEngine;
 
 /// <summary>
 /// Replaces AnimationController + RuntimeSpriteLoader for Live2D models.
-/// Loads the Haru model from Resources/Live2D/Haru at runtime and maps
+/// Loads the Natori model from Resources/Live2D/Natori at runtime and maps
 /// PetController states (Idle / Clicked / Drag) to Live2D motions.
 ///
 /// Motion mapping:
-///   Idle    → haru_g_idle  (looping)
-///   Clicked → haru_g_m14   (tap reaction, one-shot)
-///   Drag    → haru_g_m05   (alternate tap, looping while dragged)
+///   Idle    → mtn_00  (looping idle)
+///   Clicked → mtn_01  (tap reaction, one-shot)
+///   Drag    → mtn_02  (alternate tap, looping while dragged)
 /// </summary>
 public class Live2DController : MonoBehaviour
 {
@@ -23,13 +23,13 @@ public class Live2DController : MonoBehaviour
     // Constants
     // -------------------------------------------------------------------------
 
-    private const string ModelResourcePath  = "Live2D/Haru/haru_greeter_t03";
-    private const string MotionResourceBase = "Live2D/Haru/motions/";
+    private const string ModelResourcePath  = "Live2D/Natori/Natori";
+    private const string MotionResourceBase = "Live2D/Natori/motions/";
 
     // Motion file names (without extension) per state
-    private const string MotionIdle    = "haru_g_idle";
-    private const string MotionClicked = "haru_g_m14";
-    private const string MotionDrag    = "haru_g_m05";
+    private const string MotionIdle    = "mtn_00";
+    private const string MotionClicked = "mtn_01";
+    private const string MotionDrag    = "mtn_02";
 
     // -------------------------------------------------------------------------
     // Runtime state
@@ -138,7 +138,7 @@ public class Live2DController : MonoBehaviour
         // --- 6. Start idle ---
         PlayState("Idle");
 
-        Debug.Log("[Live2DController] Haru model loaded successfully.");
+        Debug.Log("[Live2DController] Natori model loaded successfully.");
     }
 
     private AnimationClip LoadMotionClip(string motionName, bool loop)
@@ -182,8 +182,8 @@ public class Live2DController : MonoBehaviour
     private static object RuntimeLoadAssetAtPath(Type type, string path)
     {
         // Convert file path to Resources-relative path
-        // e.g. "Assets/Resources/Live2D/Haru/haru_greeter_t03.model3.json"
-        //   → "Live2D/Haru/haru_greeter_t03.model3"
+        // e.g. "Assets/Resources/Live2D/Natori/Natori.model3.json"
+        //   → "Live2D/Natori/Natori.model3"
         const string resourcesPrefix = "Assets/Resources/";
         string resourcePath = path;
 
