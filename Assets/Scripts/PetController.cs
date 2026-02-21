@@ -5,7 +5,7 @@ using UnityEngine;
 /// States: Idle → Clicked → (returns to Idle after delay)
 /// Handles mouse drag via WindowManager.
 /// </summary>
-[RequireComponent(typeof(AnimationController))]
+[RequireComponent(typeof(Live2DController))]
 public class PetController : MonoBehaviour
 {
     public enum PetState { Idle, Clicked, Dragging }
@@ -24,7 +24,7 @@ public class PetController : MonoBehaviour
     // State
     // -------------------------------------------------------------------------
     private PetState         _state = PetState.Idle;
-    private AnimationController _anim;
+    private Live2DController _anim;
     private float            _clickTimer;
 
     // -------------------------------------------------------------------------
@@ -32,7 +32,7 @@ public class PetController : MonoBehaviour
     // -------------------------------------------------------------------------
     private void Awake()
     {
-        _anim = GetComponent<AnimationController>();
+        _anim = GetComponent<Live2DController>();
 
         // Auto-find WindowManager if not assigned
         if (windowManager == null)
