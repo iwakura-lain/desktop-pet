@@ -3,16 +3,20 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 
 /// <summary>
-/// System tray icon using pure Win32 Shell_NotifyIcon — no WinForms dependency.
-/// IL2CPP safe. Windows only; stubbed out on other platforms.
+/// System tray / menu-bar icon manager.
+/// Windows: pure Win32 Shell_NotifyIcon (no WinForms).
+/// macOS:   NSStatusItem via DesktopPetBridge ObjC plugin.
+/// IL2CPP safe on both platforms.
 /// </summary>
 public class TrayIconManager : MonoBehaviour
 {
-#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+    [SerializeField] private string tooltipText = "Desktop Pet";
 
-    // -------------------------------------------------------------------------
-    // Win32 constants & structs
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // Windows implementation
+    // =========================================================================
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+
     private const uint NIM_ADD    = 0x00000000;
     private const uint NIM_DELETE = 0x00000002;
     private const uint NIM_MODIFY = 0x00000001;
@@ -21,8 +25,9 @@ public class TrayIconManager : MonoBehaviour
     private const uint NIF_TIP     = 0x00000004;
     private const uint WM_APP      = 0x8000;
     private const uint TRAY_MSG    = WM_APP + 1;
-    private const uint WM_LBUTTONDBLCLK = 0x0203;
-    private const uint WM_RBUTTONUP     = 0x0205;
+
+    private const int SW_SHOW = 5;
+    private const int SW_HIDE = 0;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct NOTIFYICONDATA
@@ -48,55 +53,28 @@ public class TrayIconManager : MonoBehaviour
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern bool Shell_NotifyIcon(uint dwMessage, ref NOTIFYICONDATA lpdata);
 
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetActiveWindow();
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr LoadIcon(IntPtr hInstance, IntPtr lpIconName);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr CreateIcon(
+    [DllImport("user32.dll")] private static extern IntPtr GetActiveWindow();
+    [DllImport("user32.dll")] private static extern IntPtr CreateIcon(
         IntPtr hInstance, int nWidth, int nHeight,
         byte cPlanes, byte cBitsPixel,
         byte[] lpbANDbits, byte[] lpbXORbits);
+    [DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr hIcon);
+    [DllImport("user32.dll")] private static extern int ShowWindow(IntPtr hWnd, int nCmdShow);
 
-    [DllImport("user32.dll")]
-    private static extern bool DestroyIcon(IntPtr hIcon);
-
-    [DllImport("user32.dll")]
-    private static extern int ShowWindow(IntPtr hWnd, int nCmdShow);
-
-    private const int SW_SHOW = 5;
-    private const int SW_HIDE = 0;
-
-    // -------------------------------------------------------------------------
-    // Inspector
-    // -------------------------------------------------------------------------
-    [SerializeField] private string tooltipText = "Desktop Pet";
-
-    // -------------------------------------------------------------------------
-    // State
-    // -------------------------------------------------------------------------
     private NOTIFYICONDATA _nid;
     private IntPtr         _hwnd;
     private IntPtr         _hIcon;
     private bool           _trayAdded;
 
-    // -------------------------------------------------------------------------
-    // Lifecycle
-    // -------------------------------------------------------------------------
     private void Start()
     {
-        _hwnd = GetActiveWindow();
+        _hwnd  = GetActiveWindow();
         _hIcon = MakeTinyIcon();
         AddTrayIcon();
     }
 
     private void OnDestroy() => RemoveTrayIcon();
 
-    // -------------------------------------------------------------------------
-    // Public API
-    // -------------------------------------------------------------------------
     public void HideToTray()
     {
         ShowWindow(_hwnd, SW_HIDE);
@@ -106,16 +84,10 @@ public class TrayIconManager : MonoBehaviour
     public void ShowFromTray()
     {
         ShowWindow(_hwnd, SW_SHOW);
-
-        WindowManager wm = FindObjectOfType<WindowManager>();
-        wm?.ApplyWindowStyle();  // re-apply topmost / transparent
-
+        FindFirstObjectByType<WindowManager>()?.ApplyWindowStyle();
         ModifyTrayTip(tooltipText);
     }
 
-    // -------------------------------------------------------------------------
-    // Internals
-    // -------------------------------------------------------------------------
     private void AddTrayIcon()
     {
         _nid = new NOTIFYICONDATA
@@ -135,7 +107,7 @@ public class TrayIconManager : MonoBehaviour
     private void ModifyTrayTip(string tip)
     {
         if (!_trayAdded) return;
-        _nid.szTip = tip;
+        _nid.szTip  = tip;
         _nid.uFlags = NIF_TIP;
         Shell_NotifyIcon(NIM_MODIFY, ref _nid);
     }
@@ -148,32 +120,62 @@ public class TrayIconManager : MonoBehaviour
         if (_hIcon != IntPtr.Zero) { DestroyIcon(_hIcon); _hIcon = IntPtr.Zero; }
     }
 
-    /// <summary>Programmatically build a tiny 16x16 solid-purple icon.</summary>
+    /// <summary>Programmatically build a tiny 16x16 solid-white icon.</summary>
     private static IntPtr MakeTinyIcon()
     {
-        // 16x16 monochrome mask (all transparent = AND=1 XOR=0, except our pixels)
-        int stride = 4;  // DWORD-aligned rows for 16 pixels (16/8 = 2 bytes, padded to 4)
+        int stride = 4;
         byte[] andMask = new byte[stride * 16];
         byte[] xorMask = new byte[stride * 16];
-
-        // Fill AND mask with 0xFF (transparent), XOR with 0 initially
         for (int i = 0; i < andMask.Length; i++) andMask[i] = 0xFF;
-
-        // Draw a simple 8x8 square in the centre (rows 4-11, cols 4-11).
-        // AND=0 + XOR=1 → white pixel visible; AND=1 + XOR=0 → transparent.
         for (int row = 4; row < 12; row++)
         {
-            andMask[row * stride]     = 0x00; // cols 0-7: opaque
-            xorMask[row * stride]     = 0xFF; // cols 0-7: white
-            andMask[row * stride + 1] = 0x00; // cols 8-15: opaque
-            xorMask[row * stride + 1] = 0xFF; // cols 8-15: white
+            andMask[row * stride]     = 0x00;
+            xorMask[row * stride]     = 0xFF;
+            andMask[row * stride + 1] = 0x00;
+            xorMask[row * stride + 1] = 0xFF;
         }
-
         return CreateIcon(IntPtr.Zero, 16, 16, 1, 1, andMask, xorMask);
     }
 
-#else
-    // Non-Windows stub
+#endif  // UNITY_STANDALONE_WIN
+
+    // =========================================================================
+    // macOS implementation
+    // =========================================================================
+#if UNITY_STANDALONE_OSX && !UNITY_EDITOR
+
+    [DllImport("__Internal")] private static extern void MacOS_CreateStatusItem(string tooltip);
+    [DllImport("__Internal")] private static extern void MacOS_RemoveStatusItem();
+    [DllImport("__Internal")] private static extern void MacOS_SetWindowVisible(bool visible);
+
+    private void Start()
+    {
+        MacOS_CreateStatusItem(tooltipText);
+    }
+
+    private void OnDestroy()
+    {
+        MacOS_RemoveStatusItem();
+    }
+
+    public void HideToTray()
+    {
+        MacOS_SetWindowVisible(false);
+    }
+
+    public void ShowFromTray()
+    {
+        MacOS_SetWindowVisible(true);
+        FindFirstObjectByType<WindowManager>()?.ApplyWindowStyle();
+    }
+
+#endif  // UNITY_STANDALONE_OSX
+
+    // =========================================================================
+    // Editor / other platforms stub
+    // =========================================================================
+#if !UNITY_STANDALONE_WIN && !UNITY_STANDALONE_OSX
+    private void Start() { }
     public void HideToTray()   => gameObject.SetActive(false);
     public void ShowFromTray() => gameObject.SetActive(true);
 #endif

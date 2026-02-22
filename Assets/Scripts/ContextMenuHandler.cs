@@ -4,8 +4,8 @@ using UnityEngine;
 /// <summary>
 /// Right-click context menu for the desktop pet.
 /// Uses Unity IMGUI (safe under IL2CPP, no WinForms dependency).
-/// Uses Win32 GetCursorPos/GetAsyncKeyState to avoid dependency on
-/// either old or new Unity Input System.
+/// Windows: Win32 GetCursorPos/GetAsyncKeyState.
+/// macOS: DesktopPetBridge MacOS_GetCursorPos/MacOS_IsMouseButtonDown.
 /// </summary>
 public class ContextMenuHandler : MonoBehaviour
 {
@@ -16,12 +16,19 @@ public class ContextMenuHandler : MonoBehaviour
     [SerializeField] private Color hoverColor = new Color(0.28f, 0.28f, 0.48f, 1.00f);
     [SerializeField] private Color textColor  = new Color(0.92f, 0.92f, 0.92f, 1.00f);
 
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
     [StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct POINT { public int x, y; }
 
     [DllImport("user32.dll")] private static extern bool  GetCursorPos(out POINT p);
     [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vKey);
     private const int VK_LBUTTON = 0x01;
+#endif
+
+#if UNITY_STANDALONE_OSX && !UNITY_EDITOR
+    [DllImport("__Internal")] private static extern void MacOS_GetCursorPos(out float x, out float y);
+    [DllImport("__Internal")] private static extern bool MacOS_IsMouseButtonDown(int button);
+#endif
 
     private bool    _visible;
     private Vector2 _menuPos;
@@ -43,7 +50,7 @@ public class ContextMenuHandler : MonoBehaviour
     {
         if (!_visible) return;
 
-        bool leftDown    = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+        bool leftDown = GetLeftMouseDown();
         bool leftPressed = leftDown && !_prevLeftDown;
         _prevLeftDown = leftDown;
 
@@ -104,11 +111,30 @@ public class ContextMenuHandler : MonoBehaviour
         }
     }
 
-    // Convert Win32 screen coords to Unity GUI coords (Y flipped)
+    private bool GetLeftMouseDown()
+    {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        return (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+#elif UNITY_STANDALONE_OSX && !UNITY_EDITOR
+        return MacOS_IsMouseButtonDown(0);
+#else
+        return false;
+#endif
+    }
+
+    // Convert native screen coords to Unity GUI coords (Y flipped)
     private Vector2 GetMouseGuiPos()
     {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         GetCursorPos(out POINT p);
         return new Vector2(p.x, Screen.height - p.y);
+#elif UNITY_STANDALONE_OSX && !UNITY_EDITOR
+        MacOS_GetCursorPos(out float cx, out float cy);
+        // macOS reports bottom-up; Unity GUI is top-down
+        return new Vector2(cx, Screen.height - cy);
+#else
+        return Vector2.zero;
+#endif
     }
 
     private void OnMenuItemSelected(int index)

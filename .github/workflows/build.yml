@@ -1,4 +1,4 @@
-name: Build Windows Desktop Pet
+name: Build Desktop Pet
 
 on:
   push:
@@ -6,7 +6,10 @@ on:
       - 'v*'
 
 jobs:
-  build:
+  # ---------------------------------------------------------------------------
+  # Windows build (Linux runner via game-ci)
+  # ---------------------------------------------------------------------------
+  build-windows:
     name: Build StandaloneWindows64
     runs-on: ubuntu-latest
     permissions:
@@ -19,7 +22,7 @@ jobs:
           fetch-depth: 0
           lfs: true
 
-      - name: Cache Unity Library
+      - name: Cache Unity Library (Windows)
         uses: actions/cache@v4
         with:
           path: Library
@@ -28,7 +31,7 @@ jobs:
             Library-StandaloneWindows64-
             Library-
 
-      - name: Build project
+      - name: Build project (Windows)
         uses: game-ci/unity-builder@v4
         env:
           UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
@@ -42,23 +45,83 @@ jobs:
           customParameters: -nographics
           sceneList:       Assets/Scenes/Main.unity
 
-      - name: Upload build artifact
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: desktop-pet-windows-${{ github.ref_name }}
           path: build/StandaloneWindows64
           retention-days: 7
 
-      - name: Zip build
+      - name: Zip Windows build
         run: zip -r desktop-pet-windows-${{ github.ref_name }}.zip build/StandaloneWindows64/
 
-      - name: Create GitHub Release
+      - name: Upload Windows zip to release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name:     Desktop Pet ${{ github.ref_name }}
-          draft:    false
+          tag_name:   ${{ github.ref_name }}
+          name:       Desktop Pet ${{ github.ref_name }}
+          draft:      false
           prerelease: false
-          files: desktop-pet-windows-${{ github.ref_name }}.zip
+          files:      desktop-pet-windows-${{ github.ref_name }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # macOS Universal Binary build (macOS runner required for ObjC plugin)
+  # ---------------------------------------------------------------------------
+  build-macos:
+    name: Build StandaloneOSX (Universal)
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Cache Unity Library (macOS)
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-StandaloneOSX-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-StandaloneOSX-
+            Library-
+
+      - name: Build project (macOS)
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion:    2022.3.62f1
+          targetPlatform:  StandaloneOSX
+          buildName:       desktop-pet
+          buildsPath:      build
+          customParameters: -nographics -architecture Universal
+          sceneList:       Assets/Scenes/Main.unity
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-pet-macos-${{ github.ref_name }}
+          path: build/StandaloneOSX
+          retention-days: 7
+
+      - name: Zip macOS build
+        run: zip -r desktop-pet-macos-${{ github.ref_name }}.zip build/StandaloneOSX/
+
+      - name: Upload macOS zip to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   ${{ github.ref_name }}
+          name:       Desktop Pet ${{ github.ref_name }}
+          draft:      false
+          prerelease: false
+          files:      desktop-pet-macos-${{ github.ref_name }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
