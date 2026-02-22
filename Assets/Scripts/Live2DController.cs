@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.IO;
 using Live2D.Cubism.Core;
 using Live2D.Cubism.Framework.Json;
@@ -122,12 +123,11 @@ public class Live2DController : MonoBehaviour
         if (_model.GetComponent<CubismRenderController>() == null)
             _model.gameObject.AddComponent<CubismRenderController>();
 
-        // --- 3b. Fix alpha channel for DWM transparent window ---
-        // Default Cubism materials use _SrcAlpha=0/_DstAlpha=1, so the model
-        // never writes alpha into the framebuffer. DWM reads the framebuffer
-        // alpha to decide transparency, so alpha=0 makes the model invisible.
-        // Fix: set _SrcAlpha=1 (SrcAlpha) and _DstAlpha=10 (OneMinusSrcAlpha).
-        FixMaterialAlpha();
+        // --- 3b. Fix alpha channel for DWM transparent window (next frame) ---
+        // CubismRenderer components are created in CubismRenderController.OnEnable()
+        // which runs in the same frame as AddComponent. Defer one frame to ensure
+        // all renderers and their materials are fully initialized before patching.
+        StartCoroutine(FixMaterialAlphaNextFrame());
 
         // --- 4. Add motion playback components ---
         if (_model.GetComponent<CubismFadeController>() == null)
@@ -146,6 +146,14 @@ public class Live2DController : MonoBehaviour
         PlayState("Idle");
 
         Debug.Log("[Live2DController] Natori model loaded successfully.");
+    }
+
+    private IEnumerator FixMaterialAlphaNextFrame()
+    {
+        // Wait one frame so CubismRenderController.OnEnable() has finished
+        // creating and initializing all CubismRenderer components + materials.
+        yield return null;
+        FixMaterialAlpha();
     }
 
     private void FixMaterialAlpha()
