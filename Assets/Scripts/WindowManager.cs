@@ -38,10 +38,13 @@ public class WindowManager : MonoBehaviour
     [DllImport("user32.dll")] private static extern bool   MoveWindow(IntPtr h, int x, int y, int w, int ht, bool rep);
     [DllImport("user32.dll")] private static extern int    ShowWindow(IntPtr h, int cmd);
     [DllImport("user32.dll")] private static extern short  GetAsyncKeyState(int vKey);
+    [DllImport("user32.dll")] private static extern int    GetSystemMetrics(int nIndex);
     [DllImport("Dwmapi.dll")] private static extern uint   DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS m);
 
-    private const int VK_LBUTTON = 0x01;
-    private const int VK_RBUTTON = 0x02;
+    private const int VK_LBUTTON   = 0x01;
+    private const int VK_RBUTTON   = 0x02;
+    private const int SM_CXSCREEN  = 0;
+    private const int SM_CYSCREEN  = 1;
 
     private IntPtr        _hwnd;
     private bool          _isDragging;
@@ -86,8 +89,16 @@ public class WindowManager : MonoBehaviour
         Debug.Log($"[WM] hwnd={_hwnd} product={Application.productName}");
         if (_hwnd != IntPtr.Zero)
         {
+            // Expand window to full screen so mouse coords map correctly
+            int sw = GetSystemMetrics(SM_CXSCREEN);
+            int sh = GetSystemMetrics(SM_CYSCREEN);
+            Screen.SetResolution(sw, sh, false);
+            // Wait one frame for Unity to resize the render surface
+            yield return null;
+            MoveWindow(_hwnd, 0, 0, sw, sh, false);
+
             ApplyWindowStyle();
-            Debug.Log($"[WM] after ApplyWindowStyle exStyle=0x{GetWindowLong(_hwnd, GWL_EXSTYLE):X}");
+            Debug.Log($"[WM] fullscreen {sw}x{sh} exStyle=0x{GetWindowLong(_hwnd, GWL_EXSTYLE):X}");
         }
         else
         {
