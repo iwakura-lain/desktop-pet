@@ -1,7 +1,5 @@
-using System.Collections;
 using Live2D.Cubism.Framework.Motion;
 using Live2D.Cubism.Framework.MotionFade;
-using Live2D.Cubism.Rendering;
 using UnityEngine;
 
 /// <summary>
@@ -95,9 +93,6 @@ public class Live2DController : MonoBehaviour
 
         Debug.Log("[Live2DController] Natori prefab instantiated.");
 
-        // --- 3. Fix alpha channel for DWM transparent window (next frame) ---
-        StartCoroutine(FixMaterialAlphaNextFrame());
-
         // --- 4. Add motion playback components if not already present ---
         if (_modelRoot.GetComponent<CubismFadeController>() == null)
             _modelRoot.AddComponent<CubismFadeController>();
@@ -115,35 +110,6 @@ public class Live2DController : MonoBehaviour
         PlayState("Idle");
 
         Debug.Log("[Live2DController] Natori model ready.");
-    }
-
-    private IEnumerator FixMaterialAlphaNextFrame()
-    {
-        yield return null;
-        FixMaterialAlpha();
-    }
-
-    private void FixMaterialAlpha()
-    {
-        // Cubism Normal blend mode as set by CubismAssetProcessor:
-        //   _SrcColor = One (1), _DstColor = OneMinusSrcAlpha (10)
-        //   _SrcAlpha = One (1), _DstAlpha = OneMinusSrcAlpha (10)
-        // Default materials ship with all four = 0, so color and alpha are invisible.
-        // DWM transparent windows need framebuffer alpha to be written correctly.
-        // Unity BlendMode enum: Zero=0, One=1, ..., OneMinusSrcAlpha=10
-        var renderers = _modelRoot.GetComponentsInChildren<CubismRenderer>(includeInactive: true);
-        Debug.Log($"[Live2DController] Fixing blend on {renderers.Length} CubismRenderers.");
-        foreach (var r in renderers)
-        {
-            var mat = r.Material;
-            if (mat == null) continue;
-            mat = new Material(mat);
-            mat.SetInt("_SrcColor", 1);   // One
-            mat.SetInt("_DstColor", 10);  // OneMinusSrcAlpha
-            mat.SetInt("_SrcAlpha", 1);   // One
-            mat.SetInt("_DstAlpha", 10);  // OneMinusSrcAlpha
-            r.Material = mat;
-        }
     }
 
     private AnimationClip LoadMotionClip(string motionName, bool loop)
