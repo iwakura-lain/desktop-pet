@@ -89,7 +89,7 @@ public class Live2DController : MonoBehaviour
         // --- 2. Instantiate and parent under this GameObject ---
         _modelRoot = Instantiate(prefab, transform);
         _modelRoot.transform.localPosition = Vector3.zero;
-        _modelRoot.transform.localScale    = Vector3.one * 0.01f;
+        _modelRoot.transform.localScale    = Vector3.one;
 
         Debug.Log("[Live2DController] Natori prefab instantiated.");
 
