@@ -29,6 +29,7 @@ public class WindowManager : MonoBehaviour
     [StructLayout(LayoutKind.Sequential)] private struct RECT  { public int left, top, right, bottom; }
 
     [DllImport("user32.dll")] private static extern IntPtr GetActiveWindow();
+    [DllImport("user32.dll")] private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
     [DllImport("user32.dll")] private static extern int    SetWindowLong(IntPtr hWnd, int nIndex, uint dwNewLong);
     [DllImport("user32.dll")] private static extern uint   GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll")] private static extern bool   SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
@@ -60,11 +61,34 @@ public class WindowManager : MonoBehaviour
             cam.clearFlags      = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
         }
-        _hwnd = GetActiveWindow();
-        ApplyWindowStyle();
-        Debug.Log($"[WM] hwnd={_hwnd} exStyle=0x{GetWindowLong(_hwnd, GWL_EXSTYLE):X}");
+        StartCoroutine(InitWindowDelayed());
 #endif
     }
+
+#if !UNITY_EDITOR && UNITY_STANDALONE_WIN
+    private System.Collections.IEnumerator InitWindowDelayed()
+    {
+        // Wait a few frames for Unity's window to become active
+        for (int i = 0; i < 5; i++)
+            yield return null;
+
+        // Try GetActiveWindow first, fall back to FindWindow by title
+        _hwnd = GetActiveWindow();
+        if (_hwnd == IntPtr.Zero)
+            _hwnd = FindWindow(null, Application.productName);
+
+        Debug.Log($"[WM] hwnd={_hwnd} product={Application.productName}");
+        if (_hwnd != IntPtr.Zero)
+        {
+            ApplyWindowStyle();
+            Debug.Log($"[WM] after ApplyWindowStyle exStyle=0x{GetWindowLong(_hwnd, GWL_EXSTYLE):X}");
+        }
+        else
+        {
+            Debug.LogError("[WM] Failed to obtain window handle!");
+        }
+    }
+#endif
 
     private void Update()
     {
