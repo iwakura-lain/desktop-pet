@@ -221,17 +221,19 @@ public class Live2DController : MonoBehaviour
         // Convert file path to Resources-relative path
         // e.g. "Assets/Resources/Live2D/Natori/Natori.model3.json"
         //   → "Live2D/Natori/Natori.model3"
+        // e.g. "Assets/Resources/Live2D/Natori/Natori.moc3"
+        //   → "Live2D/Natori/Natori.moc3"  (keep non-json extensions as-is)
         const string resourcesPrefix = "Assets/Resources/";
         string resourcePath = path;
 
         if (resourcePath.StartsWith(resourcesPrefix))
             resourcePath = resourcePath.Substring(resourcesPrefix.Length);
 
-        // Strip extension for Resources.Load
+        // Only strip ".json" suffix — Resources.Load needs the path without it.
+        // For binary assets (.moc3, .png etc.) keep the full extension so Unity
+        // can locate the correct asset in the Resources folder.
         if (resourcePath.EndsWith(".json"))
             resourcePath = resourcePath.Substring(0, resourcePath.Length - 5);
-        else if (Path.HasExtension(resourcePath))
-            resourcePath = Path.ChangeExtension(resourcePath, null);
 
         if (type == typeof(string))
         {
@@ -245,7 +247,6 @@ public class Live2DController : MonoBehaviour
         }
         if (type == typeof(Texture2D))
         {
-            // Texture path may still have extension - strip it
             return Resources.Load<Texture2D>(resourcePath);
         }
 
