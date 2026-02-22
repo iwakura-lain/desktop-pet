@@ -64,15 +64,13 @@ public class WindowManager : MonoBehaviour
     private void Start()
     {
 #if !UNITY_EDITOR && UNITY_STANDALONE_WIN
-        // Camera: transparent black background + preserve framebuffer alpha.
-        // preserveFramebufferAlpha=true prevents Unity from overwriting the alpha
-        // channel that DWM reads to determine per-pixel transparency.
+        // Camera: transparent black background.
+        // DWM reads the framebuffer alpha channel for per-pixel transparency.
         Camera cam = Camera.main;
         if (cam != null)
         {
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
-            cam.preserveFramebufferAlpha = true;
         }
 
         _hwnd = GetActiveWindow();
