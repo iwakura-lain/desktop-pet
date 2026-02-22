@@ -1,17 +1,12 @@
-using System;
 using System.Collections;
-using System.IO;
-using Live2D.Cubism.Core;
-using Live2D.Cubism.Framework.Json;
 using Live2D.Cubism.Framework.Motion;
 using Live2D.Cubism.Framework.MotionFade;
 using Live2D.Cubism.Rendering;
 using UnityEngine;
 
 /// <summary>
-/// Replaces AnimationController + RuntimeSpriteLoader for Live2D models.
-/// Loads the Natori model from Resources/Live2D/Natori at runtime and maps
-/// PetController states (Idle / Clicked / Drag) to Live2D motions.
+/// Loads the Natori Live2D model from its pre-built prefab in Resources/Live2D/Natori/
+/// and maps PetController states (Idle / Clicked / Drag) to Live2D motions.
 ///
 /// Motion mapping:
 ///   Idle    → mtn_00  (looping idle)
@@ -24,8 +19,8 @@ public class Live2DController : MonoBehaviour
     // Constants
     // -------------------------------------------------------------------------
 
-    private const string ModelResourcePath  = "Live2D/Natori/Natori";
-    private const string MotionResourceBase = "Live2D/Natori/motions/";
+    private const string PrefabResourcePath  = "Live2D/Natori/Natori";
+    private const string MotionResourceBase  = "Live2D/Natori/motions/";
 
     // Motion file names (without extension) per state
     private const string MotionIdle    = "mtn_00";
@@ -36,11 +31,10 @@ public class Live2DController : MonoBehaviour
     // Runtime state
     // -------------------------------------------------------------------------
 
-    private CubismModel          _model;
+    private GameObject             _modelRoot;
     private CubismMotionController _motionCtrl;
-    private string               _currentState;
+    private string                 _currentState;
 
-    // Loaded AnimationClips keyed by state name
     private AnimationClip _clipIdle;
     private AnimationClip _clipClicked;
     private AnimationClip _clipDrag;
@@ -58,7 +52,6 @@ public class Live2DController : MonoBehaviour
     // Public API — mirrors AnimationController.PlayState()
     // -------------------------------------------------------------------------
 
-    /// <summary>Plays the Live2D motion corresponding to the given state name.</summary>
     public void PlayState(string state)
     {
         if (_motionCtrl == null || state == _currentState) return;
@@ -87,107 +80,79 @@ public class Live2DController : MonoBehaviour
 
     private void LoadModel()
     {
-        // --- 1. Load model3.json from Resources ---
-        var model3JsonAsset = Resources.Load<TextAsset>(ModelResourcePath + ".model3");
-        if (model3JsonAsset == null)
+        // --- 1. Load pre-built prefab from Resources ---
+        var prefab = Resources.Load<GameObject>(PrefabResourcePath);
+        if (prefab == null)
         {
-            Debug.LogError($"[Live2DController] model3.json not found at Resources/{ModelResourcePath}.model3");
+            Debug.LogError($"[Live2DController] Prefab not found at Resources/{PrefabResourcePath}");
             return;
         }
 
-        // --- 2. Deserialize + instantiate CubismModel via runtime loader ---
-        var model3Json = CubismModel3Json.LoadAtPath(
-            "Assets/Resources/" + ModelResourcePath + ".model3.json",
-            RuntimeLoadAssetAtPath
-        );
+        // --- 2. Instantiate and parent under this GameObject ---
+        _modelRoot = Instantiate(prefab, transform);
+        _modelRoot.transform.localPosition = Vector3.zero;
+        _modelRoot.transform.localScale    = Vector3.one * 0.01f;
 
-        if (model3Json == null)
-        {
-            Debug.LogError("[Live2DController] Failed to parse model3.json");
-            return;
-        }
+        Debug.Log("[Live2DController] Natori prefab instantiated.");
 
-        _model = model3Json.ToModel();
-        if (_model == null)
-        {
-            Debug.LogError("[Live2DController] ToModel() returned null");
-            return;
-        }
-
-        // Parent model under this GameObject
-        _model.transform.SetParent(transform, false);
-        _model.transform.localPosition = Vector3.zero;
-        _model.transform.localScale    = Vector3.one * 0.01f; // Live2D units → Unity units
-
-        // --- 3. Add required rendering components if missing ---
-        if (_model.GetComponent<CubismRenderController>() == null)
-            _model.gameObject.AddComponent<CubismRenderController>();
-
-        // --- 3b. Fix alpha channel for DWM transparent window (next frame) ---
-        // CubismRenderer components are created in CubismRenderController.OnEnable()
-        // which runs in the same frame as AddComponent. Defer one frame to ensure
-        // all renderers and their materials are fully initialized before patching.
+        // --- 3. Fix alpha channel for DWM transparent window (next frame) ---
         StartCoroutine(FixMaterialAlphaNextFrame());
 
-        // --- 4. Add motion playback components ---
-        if (_model.GetComponent<CubismFadeController>() == null)
-            _model.gameObject.AddComponent<CubismFadeController>();
+        // --- 4. Add motion playback components if not already present ---
+        if (_modelRoot.GetComponent<CubismFadeController>() == null)
+            _modelRoot.AddComponent<CubismFadeController>();
 
-        _motionCtrl = _model.GetComponent<CubismMotionController>();
+        _motionCtrl = _modelRoot.GetComponent<CubismMotionController>();
         if (_motionCtrl == null)
-            _motionCtrl = _model.gameObject.AddComponent<CubismMotionController>();
+            _motionCtrl = _modelRoot.AddComponent<CubismMotionController>();
 
         // --- 5. Pre-load AnimationClips ---
         _clipIdle    = LoadMotionClip(MotionIdle,    loop: true);
-        _clipClicked = LoadMotionClip(MotionClicked,  loop: false);
-        _clipDrag    = LoadMotionClip(MotionDrag,     loop: true);
+        _clipClicked = LoadMotionClip(MotionClicked, loop: false);
+        _clipDrag    = LoadMotionClip(MotionDrag,    loop: true);
 
         // --- 6. Start idle ---
         PlayState("Idle");
 
-        Debug.Log("[Live2DController] Natori model loaded successfully.");
+        Debug.Log("[Live2DController] Natori model ready.");
     }
 
     private IEnumerator FixMaterialAlphaNextFrame()
     {
-        // Wait one frame so CubismRenderController.OnEnable() has finished
-        // creating and initializing all CubismRenderer components + materials.
         yield return null;
         FixMaterialAlpha();
     }
 
     private void FixMaterialAlpha()
     {
-        // Cubism default materials write _SrcAlpha=0, _DstAlpha=1 into the
-        // alpha channel blend, meaning the model never contributes alpha to
-        // the framebuffer. DWM transparent windows rely on framebuffer alpha
-        // to determine per-pixel transparency, so the model appears invisible.
-        //
-        // Unity BlendMode enum values:
-        //   1 = One, 5 = SrcAlpha, 10 = OneMinusSrcAlpha
-        // We set alpha blend to: src*SrcAlpha + dst*OneMinusSrcAlpha (normal alpha blend)
-        var renderers = _model.GetComponentsInChildren<CubismRenderer>(includeInactive: true);
+        // Cubism default materials write _SrcAlpha=0 into the framebuffer alpha,
+        // making the model invisible under DWM transparent windows.
+        // Unity BlendMode: 1=One, 5=SrcAlpha, 10=OneMinusSrcAlpha
+        var renderers = _modelRoot.GetComponentsInChildren<CubismRenderer>(includeInactive: true);
+        Debug.Log($"[Live2DController] Fixing alpha on {renderers.Length} CubismRenderers.");
         foreach (var r in renderers)
         {
             var mat = r.Material;
             if (mat == null) continue;
-            mat = new Material(mat); // clone to avoid modifying shared asset
-            mat.SetInt("_SrcAlpha", 5);  // SrcAlpha
-            mat.SetInt("_DstAlpha", 10); // OneMinusSrcAlpha
+            mat = new Material(mat);
+            mat.SetInt("_SrcAlpha", 5);   // SrcAlpha
+            mat.SetInt("_DstAlpha", 10);  // OneMinusSrcAlpha
             r.Material = mat;
         }
     }
 
     private AnimationClip LoadMotionClip(string motionName, bool loop)
     {
-        var asset = Resources.Load<TextAsset>(MotionResourceBase + motionName);
+        // Files are named mtn_00.motion3.json — Unity stores them as TextAsset
+        // with the path "motions/mtn_00.motion3" (strips only the last ".json").
+        var asset = Resources.Load<TextAsset>(MotionResourceBase + motionName + ".motion3");
         if (asset == null)
         {
-            Debug.LogWarning($"[Live2DController] Motion not found: {MotionResourceBase}{motionName}");
+            Debug.LogWarning($"[Live2DController] Motion not found: {MotionResourceBase}{motionName}.motion3");
             return null;
         }
 
-        var motion3Json = CubismMotion3Json.LoadFrom(asset);
+        var motion3Json = Live2D.Cubism.Framework.Json.CubismMotion3Json.LoadFrom(asset);
         if (motion3Json == null)
         {
             Debug.LogWarning($"[Live2DController] Failed to parse motion: {motionName}");
@@ -199,7 +164,6 @@ public class Live2DController : MonoBehaviour
 
         clip.wrapMode = loop ? WrapMode.Loop : WrapMode.Once;
         clip.legacy   = false;
-
         return clip;
     }
 
@@ -210,46 +174,5 @@ public class Live2DController : MonoBehaviour
             layerIndex: 0,
             priority:   CubismMotionPriority.PriorityNormal,
             isLoop:     isLoop);
-    }
-
-    // -------------------------------------------------------------------------
-    // Runtime asset loader for CubismModel3Json.LoadAtPath
-    // -------------------------------------------------------------------------
-
-    private static object RuntimeLoadAssetAtPath(Type type, string path)
-    {
-        // Convert file path to Resources-relative path
-        // e.g. "Assets/Resources/Live2D/Natori/Natori.model3.json"
-        //   → "Live2D/Natori/Natori.model3"
-        // e.g. "Assets/Resources/Live2D/Natori/Natori.moc3"
-        //   → "Live2D/Natori/Natori.moc3"  (keep non-json extensions as-is)
-        const string resourcesPrefix = "Assets/Resources/";
-        string resourcePath = path;
-
-        if (resourcePath.StartsWith(resourcesPrefix))
-            resourcePath = resourcePath.Substring(resourcesPrefix.Length);
-
-        // Only strip ".json" suffix — Resources.Load needs the path without it.
-        // For binary assets (.moc3, .png etc.) keep the full extension so Unity
-        // can locate the correct asset in the Resources folder.
-        if (resourcePath.EndsWith(".json"))
-            resourcePath = resourcePath.Substring(0, resourcePath.Length - 5);
-
-        if (type == typeof(string))
-        {
-            var textAsset = Resources.Load<TextAsset>(resourcePath);
-            return textAsset != null ? textAsset.text : null;
-        }
-        if (type == typeof(byte[]))
-        {
-            var textAsset = Resources.Load<TextAsset>(resourcePath);
-            return textAsset != null ? textAsset.bytes : null;
-        }
-        if (type == typeof(Texture2D))
-        {
-            return Resources.Load<Texture2D>(resourcePath);
-        }
-
-        return Resources.Load(resourcePath);
     }
 }
