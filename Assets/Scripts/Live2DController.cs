@@ -1,7 +1,5 @@
-using System.Collections;
 using Live2D.Cubism.Framework.Motion;
 using Live2D.Cubism.Framework.MotionFade;
-using Live2D.Cubism.Rendering;
 using UnityEngine;
 
 /// <summary>
@@ -15,21 +13,11 @@ using UnityEngine;
 /// </summary>
 public class Live2DController : MonoBehaviour
 {
-    // -------------------------------------------------------------------------
-    // Constants
-    // -------------------------------------------------------------------------
-
-    private const string PrefabResourcePath  = "Live2D/Natori/Natori";
-    private const string MotionResourceBase  = "Live2D/Natori/motions/";
-
-    // Motion file names (without extension) per state
-    private const string MotionIdle    = "mtn_00";
-    private const string MotionClicked = "mtn_01";
-    private const string MotionDrag    = "mtn_02";
-
-    // -------------------------------------------------------------------------
-    // Runtime state
-    // -------------------------------------------------------------------------
+    private const string PrefabResourcePath = "Live2D/Natori/Natori";
+    private const string MotionResourceBase = "Live2D/Natori/motions/";
+    private const string MotionIdle         = "mtn_00";
+    private const string MotionClicked      = "mtn_01";
+    private const string MotionDrag         = "mtn_02";
 
     private GameObject             _modelRoot;
     private CubismMotionController _motionCtrl;
@@ -39,18 +27,10 @@ public class Live2DController : MonoBehaviour
     private AnimationClip _clipClicked;
     private AnimationClip _clipDrag;
 
-    // -------------------------------------------------------------------------
-    // Lifecycle
-    // -------------------------------------------------------------------------
-
     private void Start()
     {
         LoadModel();
     }
-
-    // -------------------------------------------------------------------------
-    // Public API — mirrors AnimationController.PlayState()
-    // -------------------------------------------------------------------------
 
     public void PlayState(string state)
     {
@@ -59,28 +39,17 @@ public class Live2DController : MonoBehaviour
 
         switch (state)
         {
-            case "Idle":
-                PlayClip(_clipIdle, isLoop: true);
-                break;
-            case "Clicked":
-                PlayClip(_clipClicked, isLoop: false);
-                break;
-            case "Drag":
-                PlayClip(_clipDrag, isLoop: true);
-                break;
+            case "Idle":    PlayClip(_clipIdle,    isLoop: true);  break;
+            case "Clicked": PlayClip(_clipClicked, isLoop: false); break;
+            case "Drag":    PlayClip(_clipDrag,    isLoop: true);  break;
             default:
                 Debug.LogWarning($"[Live2DController] Unknown state: {state}");
                 break;
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
-
     private void LoadModel()
     {
-        // --- 1. Load pre-built prefab from Resources ---
         var prefab = Resources.Load<GameObject>(PrefabResourcePath);
         if (prefab == null)
         {
@@ -88,41 +57,10 @@ public class Live2DController : MonoBehaviour
             return;
         }
 
-        // --- 2. Instantiate and parent under this GameObject ---
         _modelRoot = Instantiate(prefab, transform);
         _modelRoot.transform.localPosition = Vector3.zero;
         _modelRoot.transform.localScale    = Vector3.one;
 
-        Debug.Log("[Live2DController] Natori prefab instantiated.");
-
-        // Diagnostics: check renderers, materials, camera
-        var renderers = _modelRoot.GetComponentsInChildren<CubismRenderer>(includeInactive: true);
-        Debug.Log($"[Live2DController] CubismRenderer count: {renderers.Length}");
-        if (renderers.Length > 0)
-        {
-            var r0 = renderers[0];
-            var mat = r0.Material;
-            Debug.Log($"[Live2DController] Renderer[0] active={r0.gameObject.activeInHierarchy} enabled={r0.enabled} mat={(mat != null ? mat.name : "NULL")}");
-            if (mat != null)
-                Debug.Log($"[Live2DController] Mat blend: SrcColor={mat.GetInt("_SrcColor")} DstColor={mat.GetInt("_DstColor")} SrcAlpha={mat.GetInt("_SrcAlpha")} DstAlpha={mat.GetInt("_DstAlpha")}");
-            // Check mesh
-            var mf = r0.GetComponent<MeshFilter>();
-            Debug.Log($"[Live2DController] Renderer[0] mesh={(mf != null && mf.mesh != null ? mf.mesh.name + " verts=" + mf.mesh.vertexCount : "NULL")}");
-        }
-        // Check CubismModel on root
-        var cubismModel = _modelRoot.GetComponent<Live2D.Cubism.Core.CubismModel>();
-        Debug.Log($"[Live2DController] CubismModel on root: {(cubismModel != null ? "found enabled=" + cubismModel.enabled : "NOT FOUND")}");
-        if (cubismModel != null)
-        {
-            var drawables = cubismModel.Drawables;
-            Debug.Log($"[Live2DController] CubismModel.Drawables count: {(drawables != null ? drawables.Length.ToString() : "NULL")}");
-        }
-        var cam = Camera.main;
-        if (cam != null)
-            Debug.Log($"[Live2DController] Camera orthoSize={cam.orthographicSize} clearFlags={cam.clearFlags} bgAlpha={cam.backgroundColor.a} pos={cam.transform.position}");
-        Debug.Log($"[Live2DController] Model world pos={_modelRoot.transform.position} scale={_modelRoot.transform.lossyScale}");
-
-        // --- 4. Add motion playback components if not already present ---
         if (_modelRoot.GetComponent<CubismFadeController>() == null)
             _modelRoot.AddComponent<CubismFadeController>();
 
@@ -130,64 +68,22 @@ public class Live2DController : MonoBehaviour
         if (_motionCtrl == null)
             _motionCtrl = _modelRoot.AddComponent<CubismMotionController>();
 
-        // --- 5. Pre-load AnimationClips ---
         _clipIdle    = LoadMotionClip(MotionIdle,    loop: true);
         _clipClicked = LoadMotionClip(MotionClicked, loop: false);
         _clipDrag    = LoadMotionClip(MotionDrag,    loop: true);
 
-        // --- 6. Start idle ---
         PlayState("Idle");
 
-        Debug.Log("[Live2DController] Natori model ready.");
-
-        // Check mesh verts after 3 frames (filled by CubismUpdateController in LateUpdate)
-        StartCoroutine(DiagnoseAfterFrames(3));
-    }
-
-    private IEnumerator DiagnoseAfterFrames(int frames)
-    {
-        for (int i = 0; i < frames; i++) yield return null;
-        var renderers = _modelRoot.GetComponentsInChildren<CubismRenderer>(includeInactive: true);
-        if (renderers.Length > 0)
-        {
-            var mf = renderers[0].GetComponent<MeshFilter>();
-            int verts = (mf != null && mf.mesh != null) ? mf.mesh.vertexCount : -1;
-            Debug.Log($"[Live2DController] After {frames} frames: verts={verts}");
-
-            // Check MeshRenderer bounds to see if geometry is in camera view
-            var mr = renderers[0].GetComponent<MeshRenderer>();
-            if (mr != null)
-                Debug.Log($"[Live2DController] MeshRenderer[0] bounds center={mr.bounds.center} size={mr.bounds.size} visible={mr.isVisible}");
-        }
-        var cubismModel = _modelRoot.GetComponent<Live2D.Cubism.Core.CubismModel>();
-        if (cubismModel != null)
-        {
-            var drawables = cubismModel.Drawables;
-            Debug.Log($"[Live2DController] Drawables={( drawables != null ? drawables.Length.ToString() : "NULL")}");
-        }
-        // Log camera frustum
-        var cam = Camera.main;
-        if (cam != null)
-            Debug.Log($"[Live2DController] Camera frustum: orthoSize={cam.orthographicSize} near={cam.nearClipPlane} far={cam.farClipPlane} cullingMask={cam.cullingMask}");
+        Debug.Log("[Live2DController] Natori model loaded.");
     }
 
     private AnimationClip LoadMotionClip(string motionName, bool loop)
     {
-        // Files are named mtn_00.motion3.json — Unity stores them as TextAsset
-        // with the path "motions/mtn_00.motion3" (strips only the last ".json").
         var asset = Resources.Load<TextAsset>(MotionResourceBase + motionName + ".motion3");
-        if (asset == null)
-        {
-            Debug.LogWarning($"[Live2DController] Motion not found: {MotionResourceBase}{motionName}.motion3");
-            return null;
-        }
+        if (asset == null) return null;
 
         var motion3Json = Live2D.Cubism.Framework.Json.CubismMotion3Json.LoadFrom(asset);
-        if (motion3Json == null)
-        {
-            Debug.LogWarning($"[Live2DController] Failed to parse motion: {motionName}");
-            return null;
-        }
+        if (motion3Json == null) return null;
 
         var clip = motion3Json.ToAnimationClip();
         if (clip == null) return null;

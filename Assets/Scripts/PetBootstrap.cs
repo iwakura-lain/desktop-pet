@@ -15,8 +15,10 @@ public class PetBootstrap : MonoBehaviour
         pet.layer = 0;
 
         // BoxCollider2D (for click detection)
+        // Size matches Live2D model bounds (~0.6 tall, ~0.4 wide at orthoSize=1)
         var col = pet.AddComponent<BoxCollider2D>();
-        col.size = new Vector2(1f, 1f);
+        col.size   = new Vector2(0.4f, 0.6f);
+        col.offset = new Vector2(0f, 0.3f);
 
         // Live2DController — loads Natori model and drives motions
         pet.AddComponent<Live2DController>();
