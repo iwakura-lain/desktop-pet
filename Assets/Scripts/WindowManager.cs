@@ -64,18 +64,15 @@ public class WindowManager : MonoBehaviour
     private void Start()
     {
 #if !UNITY_EDITOR && UNITY_STANDALONE_WIN
-        // DEBUG: use opaque green background to verify Live2D model renders
-        // If model appears on green background, the issue is DWM alpha.
         Camera cam = Camera.main;
         if (cam != null)
         {
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0f, 1f, 0f, 1f); // opaque green
+            cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
         }
 
         _hwnd = GetActiveWindow();
-        // DEBUG: skip DWM transparent to isolate rendering issue
-        // ApplyWindowStyle();
+        ApplyWindowStyle();
 #endif
     }
 
