@@ -15,9 +15,11 @@ public class WindowManager : MonoBehaviour
     private const uint   WS_VISIBLE   = 0x10000000;
     private const uint   WS_EX_LAYERED    = 0x00080000;
     private const uint   WS_EX_TRANSPARENT = 0x00000020;
+    private const uint   WS_EX_TOPMOST    = 0x00000008;
     private const uint   SWP_NOSIZE   = 0x0001;
     private const uint   SWP_NOMOVE   = 0x0002;
     private const uint   SWP_FRAMECHANGED = 0x0020;
+    private const uint   LWA_ALPHA    = 0x00000002;
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -34,13 +36,17 @@ public class WindowManager : MonoBehaviour
     [DllImport("user32.dll")] private static extern bool   GetWindowRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] private static extern bool   MoveWindow(IntPtr h, int x, int y, int w, int ht, bool rep);
     [DllImport("user32.dll")] private static extern int    ShowWindow(IntPtr h, int cmd);
+    [DllImport("user32.dll")] private static extern bool   SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
     [DllImport("Dwmapi.dll")] private static extern uint   DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS m);
 
     private IntPtr _hwnd;
     private bool   _isDragging;
     private POINT  _dragStart;
     private RECT   _winRectAtDragStart;
-    private bool   _isClickThrough = false;
+
+#if !UNITY_EDITOR && UNITY_STANDALONE_WIN
+    private bool _isClickThrough = false;
+#endif
 
     private void Start()
     {
@@ -64,7 +70,7 @@ public class WindowManager : MonoBehaviour
 
         // Determine if mouse is over the pet collider
         var ray    = Camera.main.ScreenPointToRay(Input.mousePosition);
-        bool overPet = Physics2D.GetRayIntersection(ray).collider != null;
+        bool overPet = Physics2D.GetRayIntersection(ray, Mathf.Infinity).collider != null;
 
         // Toggle click-through: transparent when not over pet
         if (overPet == _isClickThrough)
@@ -84,12 +90,15 @@ public class WindowManager : MonoBehaviour
     {
         if (_hwnd == IntPtr.Zero) return;
 
-        // Borderless popup + layered (required for WS_EX_TRANSPARENT to work)
+        // Borderless popup + layered (required for DWM transparency and WS_EX_TRANSPARENT)
         SetWindowLong(_hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
-        SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_LAYERED);
+        SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_LAYERED | WS_EX_TOPMOST);
 
-        // DWM: extend frame into entire client area = transparent
-        MARGINS margins = new MARGINS { cxLeftWidth = -1 };
+        // LWA_ALPHA=255: fully opaque via layered, but DWM glass overrides to per-pixel alpha
+        SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
+
+        // DWM: extend frame into entire client area = per-pixel alpha transparency
+        MARGINS margins = new MARGINS { cxLeftWidth = -1, cxRightWidth = -1, cyTopHeight = -1, cyBottomHeight = -1 };
         DwmExtendFrameIntoClientArea(_hwnd, ref margins);
 
         // Always on top
@@ -107,12 +116,13 @@ public class WindowManager : MonoBehaviour
     {
         if (_hwnd == IntPtr.Zero) return;
         _isDragging = true;
+#if !UNITY_EDITOR && UNITY_STANDALONE_WIN
         // Disable click-through while dragging
         uint exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
         exStyle &= ~WS_EX_TRANSPARENT;
         SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle);
         _isClickThrough = false;
-
+#endif
         GetCursorPos(out _dragStart);
         GetWindowRect(_hwnd, out _winRectAtDragStart);
     }
@@ -131,3 +141,4 @@ public class WindowManager : MonoBehaviour
 
     public void EndDrag() => _isDragging = false;
 }
+

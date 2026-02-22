@@ -14,6 +14,11 @@ public class PetBootstrap : MonoBehaviour
         var pet = new GameObject("Pet");
         pet.layer = 0;
 
+        // Rigidbody2D (kinematic) — required for Physics2D.GetRayIntersection to detect static colliders
+        var rb = pet.AddComponent<Rigidbody2D>();
+        rb.bodyType = RigidbodyType2D.Kinematic;
+        rb.gravityScale = 0f;
+
         // BoxCollider2D (for click detection)
         // Size matches Live2D model bounds (~0.6 tall, ~0.4 wide at orthoSize=1)
         var col = pet.AddComponent<BoxCollider2D>();
