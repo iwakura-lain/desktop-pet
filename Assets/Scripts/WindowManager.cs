@@ -4,9 +4,10 @@ using UnityEngine;
 
 /// <summary>
 /// Window manager — borderless, always-on-top, transparent background, draggable.
-/// Uses DWM sheet-of-glass transparency. Click-through is toggled per-frame based
-/// on whether the mouse is over the pet collider (Physics2D.GetRayIntersection).
-/// Also drives PetController input since OnMouseDown cannot work without a Raycaster.
+/// Uses DWM sheet-of-glass (DwmExtendFrameIntoClientArea margins=-1) for transparency.
+/// NOTE: Do NOT call SetLayeredWindowAttributes when using DWM glass — they are mutually
+/// exclusive. WS_EX_LAYERED is required for WS_EX_TRANSPARENT to work, but
+/// SetLayeredWindowAttributes must NOT be called alongside DwmExtendFrameIntoClientArea.
 /// </summary>
 public class WindowManager : MonoBehaviour
 {
@@ -20,7 +21,6 @@ public class WindowManager : MonoBehaviour
     private const uint SWP_NOSIZE        = 0x0001;
     private const uint SWP_NOMOVE        = 0x0002;
     private const uint SWP_FRAMECHANGED  = 0x0020;
-    private const uint LWA_ALPHA         = 0x00000002;
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -36,7 +36,6 @@ public class WindowManager : MonoBehaviour
     [DllImport("user32.dll")] private static extern bool   GetWindowRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] private static extern bool   MoveWindow(IntPtr h, int x, int y, int w, int ht, bool rep);
     [DllImport("user32.dll")] private static extern int    ShowWindow(IntPtr h, int cmd);
-    [DllImport("user32.dll")] private static extern bool   SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
     [DllImport("Dwmapi.dll")] private static extern uint   DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS m);
 
     private IntPtr        _hwnd;
@@ -47,7 +46,7 @@ public class WindowManager : MonoBehaviour
 
 #if !UNITY_EDITOR && UNITY_STANDALONE_WIN
     private bool _isClickThrough = true;
-    private bool _wasOverPet     = false;
+    private int  _diagFrames     = 0;
 #endif
 
     private void Start()
@@ -63,6 +62,7 @@ public class WindowManager : MonoBehaviour
         }
         _hwnd = GetActiveWindow();
         ApplyWindowStyle();
+        Debug.Log($"[WM] hwnd={_hwnd} exStyle=0x{GetWindowLong(_hwnd, GWL_EXSTYLE):X}");
 #endif
     }
 
@@ -72,9 +72,17 @@ public class WindowManager : MonoBehaviour
         if (_hwnd == IntPtr.Zero) return;
 
         var  ray     = Camera.main.ScreenPointToRay(Input.mousePosition);
-        bool overPet = Physics2D.GetRayIntersection(ray, Mathf.Infinity).collider != null;
+        var  hit     = Physics2D.GetRayIntersection(ray, Mathf.Infinity);
+        bool overPet = hit.collider != null;
 
-        // Toggle click-through: enabled when mouse is not over pet and not dragging
+        // Diagnostic: log hit status every 120 frames
+        _diagFrames++;
+        if (_diagFrames % 120 == 0)
+        {
+            Debug.Log($"[WM] overPet={overPet} collider={hit.collider} mousePos={Input.mousePosition} isClickThrough={_isClickThrough}");
+        }
+
+        // Toggle click-through
         bool wantThrough = !overPet && !_isDragging;
         if (wantThrough != _isClickThrough)
         {
@@ -83,16 +91,18 @@ public class WindowManager : MonoBehaviour
             if (_isClickThrough) ex |=  WS_EX_TRANSPARENT;
             else                 ex &= ~WS_EX_TRANSPARENT;
             SetWindowLong(_hwnd, GWL_EXSTYLE, ex);
+            Debug.Log($"[WM] clickThrough={_isClickThrough} overPet={overPet} exStyle=0x{ex:X}");
         }
-        _wasOverPet = overPet;
 
-        // Manual mouse input (replaces OnMouseDown/OnMouseUp which need Physics2D Raycaster)
+        // Manual mouse input
         if (overPet && Input.GetMouseButtonDown(1))
         {
+            Debug.Log("[WM] Right click on pet");
             _petController?.OnRightClick(Input.mousePosition);
         }
         else if (overPet && Input.GetMouseButtonDown(0) && !_isDragging)
         {
+            Debug.Log("[WM] Drag begin");
             _isDragging = true;
             GetCursorPos(out _dragStart);
             GetWindowRect(_hwnd, out _winRectAtDragStart);
@@ -111,6 +121,7 @@ public class WindowManager : MonoBehaviour
 
             if (Input.GetMouseButtonUp(0))
             {
+                Debug.Log("[WM] Drag end");
                 _isDragging = false;
                 _petController?.OnDragEnd();
             }
@@ -123,13 +134,12 @@ public class WindowManager : MonoBehaviour
         if (_hwnd == IntPtr.Zero) return;
 
         SetWindowLong(_hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
-        // Start with click-through; Update() will clear it when mouse enters pet
+        // WS_EX_LAYERED is required for click-through (WS_EX_TRANSPARENT) to work.
+        // Start transparent; Update() removes WS_EX_TRANSPARENT when mouse is over pet.
+        // Do NOT call SetLayeredWindowAttributes here — it conflicts with DWM glass.
         SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TRANSPARENT);
 
-        // Required to initialize the layered window before DwmExtendFrameIntoClientArea
-        SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
-
-        // DWM sheet-of-glass: per-pixel alpha transparency over entire client area
+        // DWM sheet-of-glass: per-pixel alpha over entire client area
         MARGINS m = new MARGINS { cxLeftWidth = -1, cxRightWidth = -1, cyTopHeight = -1, cyBottomHeight = -1 };
         DwmExtendFrameIntoClientArea(_hwnd, ref m);
 
