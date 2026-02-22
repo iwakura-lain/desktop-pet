@@ -151,14 +151,24 @@ public class Live2DController : MonoBehaviour
         if (renderers.Length > 0)
         {
             var mf = renderers[0].GetComponent<MeshFilter>();
-            Debug.Log($"[Live2DController] After {frames} frames: Renderer[0] mesh verts={( mf != null && mf.mesh != null ? mf.mesh.vertexCount.ToString() : "NULL")}");
+            int verts = (mf != null && mf.mesh != null) ? mf.mesh.vertexCount : -1;
+            Debug.Log($"[Live2DController] After {frames} frames: verts={verts}");
+
+            // Check MeshRenderer bounds to see if geometry is in camera view
+            var mr = renderers[0].GetComponent<MeshRenderer>();
+            if (mr != null)
+                Debug.Log($"[Live2DController] MeshRenderer[0] bounds center={mr.bounds.center} size={mr.bounds.size} visible={mr.isVisible}");
         }
         var cubismModel = _modelRoot.GetComponent<Live2D.Cubism.Core.CubismModel>();
         if (cubismModel != null)
         {
             var drawables = cubismModel.Drawables;
-            Debug.Log($"[Live2DController] After {frames} frames: Drawables={( drawables != null ? drawables.Length.ToString() : "NULL")}");
+            Debug.Log($"[Live2DController] Drawables={( drawables != null ? drawables.Length.ToString() : "NULL")}");
         }
+        // Log camera frustum
+        var cam = Camera.main;
+        if (cam != null)
+            Debug.Log($"[Live2DController] Camera frustum: orthoSize={cam.orthographicSize} near={cam.nearClipPlane} far={cam.farClipPlane} cullingMask={cam.cullingMask}");
     }
 
     private AnimationClip LoadMotionClip(string motionName, bool loop)
