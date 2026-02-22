@@ -102,8 +102,7 @@ jobs:
           targetPlatform:  StandaloneOSX
           buildName:       desktop-pet
           buildsPath:      build
-          customParameters: -nographics -architecture Universal
-          sceneList:       Assets/Scenes/Main.unity
+          customParameters: -architecture Universal
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
