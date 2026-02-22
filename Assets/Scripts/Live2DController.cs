@@ -125,17 +125,22 @@ public class Live2DController : MonoBehaviour
 
     private void FixMaterialAlpha()
     {
-        // Cubism default materials write _SrcAlpha=0 into the framebuffer alpha,
-        // making the model invisible under DWM transparent windows.
-        // Unity BlendMode: 1=One, 5=SrcAlpha, 10=OneMinusSrcAlpha
+        // Cubism Normal blend mode as set by CubismAssetProcessor:
+        //   _SrcColor = One (1), _DstColor = OneMinusSrcAlpha (10)
+        //   _SrcAlpha = One (1), _DstAlpha = OneMinusSrcAlpha (10)
+        // Default materials ship with all four = 0, so color and alpha are invisible.
+        // DWM transparent windows need framebuffer alpha to be written correctly.
+        // Unity BlendMode enum: Zero=0, One=1, ..., OneMinusSrcAlpha=10
         var renderers = _modelRoot.GetComponentsInChildren<CubismRenderer>(includeInactive: true);
-        Debug.Log($"[Live2DController] Fixing alpha on {renderers.Length} CubismRenderers.");
+        Debug.Log($"[Live2DController] Fixing blend on {renderers.Length} CubismRenderers.");
         foreach (var r in renderers)
         {
             var mat = r.Material;
             if (mat == null) continue;
             mat = new Material(mat);
-            mat.SetInt("_SrcAlpha", 5);   // SrcAlpha
+            mat.SetInt("_SrcColor", 1);   // One
+            mat.SetInt("_DstColor", 10);  // OneMinusSrcAlpha
+            mat.SetInt("_SrcAlpha", 1);   // One
             mat.SetInt("_DstAlpha", 10);  // OneMinusSrcAlpha
             r.Material = mat;
         }
