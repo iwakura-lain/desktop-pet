@@ -31,7 +31,7 @@ public class Live2DController : MonoBehaviour
     private AnimationClip _clipClicked;
     private AnimationClip _clipDrag;
 
-    private void Start()
+    private void Awake()
     {
         LoadModel();
     }

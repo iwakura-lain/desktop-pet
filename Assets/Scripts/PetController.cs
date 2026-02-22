@@ -21,6 +21,7 @@ public class PetController : MonoBehaviour
     {
         _anim        = GetComponent<Live2DController>();
         _contextMenu = GetComponent<ContextMenuHandler>();
+        Debug.Log($"[PC] Awake: _anim={_anim}");
     }
 
     private void Start()
