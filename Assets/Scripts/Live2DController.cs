@@ -118,7 +118,7 @@ public class Live2DController : MonoBehaviour
         if (clip == null) return;
         _motionCtrl.PlayAnimation(clip,
             layerIndex: 0,
-            priority:   CubismMotionPriority.PriorityNormal,
+            priority:   CubismMotionPriority.PriorityForce,
             isLoop:     isLoop);
     }
 }
