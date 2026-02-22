@@ -13,7 +13,7 @@ public class TrayIconManager : MonoBehaviour
     [SerializeField] private string tooltipText = "Desktop Pet";
 
     // =========================================================================
-    // Windows implementation
+    // Windows P/Invoke
     // =========================================================================
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
 
@@ -70,25 +70,12 @@ public class TrayIconManager : MonoBehaviour
     {
         _hwnd  = GetActiveWindow();
         _hIcon = MakeTinyIcon();
-        AddTrayIcon();
+        AddTrayIcon_Win();
     }
 
-    private void OnDestroy() => RemoveTrayIcon();
+    private void OnDestroy() => RemoveTrayIcon_Win();
 
-    public void HideToTray()
-    {
-        ShowWindow(_hwnd, SW_HIDE);
-        ModifyTrayTip(tooltipText + " (hidden — double-click to restore)");
-    }
-
-    public void ShowFromTray()
-    {
-        ShowWindow(_hwnd, SW_SHOW);
-        FindFirstObjectByType<WindowManager>()?.ApplyWindowStyle();
-        ModifyTrayTip(tooltipText);
-    }
-
-    private void AddTrayIcon()
+    private void AddTrayIcon_Win()
     {
         _nid = new NOTIFYICONDATA
         {
@@ -104,7 +91,7 @@ public class TrayIconManager : MonoBehaviour
         _trayAdded = true;
     }
 
-    private void ModifyTrayTip(string tip)
+    private void ModifyTrayTip_Win(string tip)
     {
         if (!_trayAdded) return;
         _nid.szTip  = tip;
@@ -112,7 +99,7 @@ public class TrayIconManager : MonoBehaviour
         Shell_NotifyIcon(NIM_MODIFY, ref _nid);
     }
 
-    private void RemoveTrayIcon()
+    private void RemoveTrayIcon_Win()
     {
         if (!_trayAdded) return;
         Shell_NotifyIcon(NIM_DELETE, ref _nid);
@@ -120,7 +107,6 @@ public class TrayIconManager : MonoBehaviour
         if (_hIcon != IntPtr.Zero) { DestroyIcon(_hIcon); _hIcon = IntPtr.Zero; }
     }
 
-    /// <summary>Programmatically build a tiny 16x16 solid-white icon.</summary>
     private static IntPtr MakeTinyIcon()
     {
         int stride = 4;
@@ -140,7 +126,7 @@ public class TrayIconManager : MonoBehaviour
 #endif  // UNITY_STANDALONE_WIN
 
     // =========================================================================
-    // macOS implementation
+    // macOS P/Invoke
     // =========================================================================
 #if UNITY_STANDALONE_OSX && !UNITY_EDITOR
 
@@ -148,35 +134,37 @@ public class TrayIconManager : MonoBehaviour
     [DllImport("__Internal")] private static extern void MacOS_RemoveStatusItem();
     [DllImport("__Internal")] private static extern void MacOS_SetWindowVisible(bool visible);
 
-    private void Start()
-    {
-        MacOS_CreateStatusItem(tooltipText);
-    }
-
-    private void OnDestroy()
-    {
-        MacOS_RemoveStatusItem();
-    }
-
-    public void HideToTray()
-    {
-        MacOS_SetWindowVisible(false);
-    }
-
-    public void ShowFromTray()
-    {
-        MacOS_SetWindowVisible(true);
-        FindFirstObjectByType<WindowManager>()?.ApplyWindowStyle();
-    }
+    private void Start()  => MacOS_CreateStatusItem(tooltipText);
+    private void OnDestroy() => MacOS_RemoveStatusItem();
 
 #endif  // UNITY_STANDALONE_OSX
 
     // =========================================================================
-    // Editor / other platforms stub
+    // Public API — always visible regardless of platform
     // =========================================================================
-#if !UNITY_STANDALONE_WIN && !UNITY_STANDALONE_OSX
-    private void Start() { }
-    public void HideToTray()   => gameObject.SetActive(false);
-    public void ShowFromTray() => gameObject.SetActive(true);
+    public void HideToTray()
+    {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        ShowWindow(_hwnd, SW_HIDE);
+        ModifyTrayTip_Win(tooltipText + " (hidden)");
+#elif UNITY_STANDALONE_OSX && !UNITY_EDITOR
+        MacOS_SetWindowVisible(false);
+#else
+        gameObject.SetActive(false);
 #endif
+    }
+
+    public void ShowFromTray()
+    {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        ShowWindow(_hwnd, SW_SHOW);
+        FindFirstObjectByType<WindowManager>()?.ApplyWindowStyle();
+        ModifyTrayTip_Win(tooltipText);
+#elif UNITY_STANDALONE_OSX && !UNITY_EDITOR
+        MacOS_SetWindowVisible(true);
+        FindFirstObjectByType<WindowManager>()?.ApplyWindowStyle();
+#else
+        gameObject.SetActive(true);
+#endif
+    }
 }
