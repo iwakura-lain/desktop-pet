@@ -1,45 +1,26 @@
 using UnityEngine;
 
 /// <summary>
-/// Main desktop-pet controller.
-/// States: Idle → Clicked → (returns to Idle after delay)
-/// Handles mouse drag via WindowManager.
+/// Desktop-pet state machine: Idle / Clicked / Dragging.
+/// Input is driven externally by WindowManager (OnMouseDown/OnMouseUp cannot work
+/// with BoxCollider2D without a Physics2D Raycaster on the camera).
 /// </summary>
 [RequireComponent(typeof(Live2DController))]
 public class PetController : MonoBehaviour
 {
     public enum PetState { Idle, Clicked, Dragging }
 
-    // -------------------------------------------------------------------------
-    // Inspector
-    // -------------------------------------------------------------------------
-    [Header("References")]
-    [SerializeField] private WindowManager windowManager;
-    [SerializeField] private ContextMenuHandler contextMenu;
-
-    [Header("Behaviour")]
     [SerializeField] private float clickResetDelay = 1.5f;
 
-    // -------------------------------------------------------------------------
-    // State
-    // -------------------------------------------------------------------------
     private PetState         _state = PetState.Idle;
     private Live2DController _anim;
+    private ContextMenuHandler _contextMenu;
     private float            _clickTimer;
 
-    // -------------------------------------------------------------------------
-    // Lifecycle
-    // -------------------------------------------------------------------------
     private void Awake()
     {
-        _anim = GetComponent<Live2DController>();
-
-        // Auto-find WindowManager if not assigned
-        if (windowManager == null)
-            windowManager = FindFirstObjectByType<WindowManager>();
-
-        if (contextMenu == null)
-            contextMenu = GetComponent<ContextMenuHandler>();
+        _anim        = GetComponent<Live2DController>();
+        _contextMenu = GetComponent<ContextMenuHandler>();
     }
 
     private void Start()
@@ -49,70 +30,42 @@ public class PetController : MonoBehaviour
 
     private void Update()
     {
-        switch (_state)
+        if (_state == PetState.Clicked)
         {
-            case PetState.Idle:
-                // Nothing special; AnimationController loops idle frames
-                break;
-
-            case PetState.Clicked:
-                _clickTimer -= Time.deltaTime;
-                if (_clickTimer <= 0f)
-                    TransitionTo(PetState.Idle);
-                break;
-
-            case PetState.Dragging:
-                windowManager?.UpdateDrag();
-                break;
+            _clickTimer -= Time.deltaTime;
+            if (_clickTimer <= 0f)
+                TransitionTo(PetState.Idle);
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Input — uses OnMouseDown/OnMouseUp (works with 2D Collider automatically)
-    // -------------------------------------------------------------------------
-
-    private void OnMouseDown()
+    // Called by WindowManager when left mouse button pressed over pet
+    public void OnDragBegin()
     {
-        // Right-click → context menu
-        if (Input.GetMouseButton(1))
-        {
-            Vector2 mp = Input.mousePosition;
-            contextMenu?.ShowAt(new Vector2(mp.x, Screen.height - mp.y));
-            return;
-        }
-        contextMenu?.Hide();
+        _contextMenu?.Hide();
         TransitionTo(PetState.Dragging);
-        windowManager?.BeginDrag();
     }
 
-    private void OnMouseUp()
+    // Called by WindowManager when left mouse button released
+    public void OnDragEnd()
     {
-        if (_state == PetState.Dragging)
-        {
-            windowManager?.EndDrag();
-            TransitionTo(PetState.Clicked);
-            _clickTimer = clickResetDelay;
-        }
+        TransitionTo(PetState.Clicked);
+        _clickTimer = clickResetDelay;
     }
 
-    // -------------------------------------------------------------------------
-    // State machine
-    // -------------------------------------------------------------------------
+    // Called by WindowManager when right mouse button pressed over pet
+    public void OnRightClick(Vector2 screenPos)
+    {
+        _contextMenu?.ShowAt(new Vector2(screenPos.x, Screen.height - screenPos.y));
+    }
+
     private void TransitionTo(PetState next)
     {
         _state = next;
         switch (next)
         {
-            case PetState.Idle:
-                _anim.PlayState("Idle");
-                break;
-            case PetState.Clicked:
-                _anim.PlayState("Clicked");
-                _clickTimer = clickResetDelay;
-                break;
-            case PetState.Dragging:
-                _anim.PlayState("Drag");
-                break;
+            case PetState.Idle:    _anim.PlayState("Idle");    break;
+            case PetState.Clicked: _anim.PlayState("Clicked"); break;
+            case PetState.Dragging: _anim.PlayState("Drag");   break;
         }
     }
 }
