@@ -1,3 +1,4 @@
+using System.Collections;
 using Live2D.Cubism.Framework.Motion;
 using Live2D.Cubism.Framework.MotionFade;
 using Live2D.Cubism.Rendering;
@@ -111,6 +112,11 @@ public class Live2DController : MonoBehaviour
         // Check CubismModel on root
         var cubismModel = _modelRoot.GetComponent<Live2D.Cubism.Core.CubismModel>();
         Debug.Log($"[Live2DController] CubismModel on root: {(cubismModel != null ? "found enabled=" + cubismModel.enabled : "NOT FOUND")}");
+        if (cubismModel != null)
+        {
+            var drawables = cubismModel.Drawables;
+            Debug.Log($"[Live2DController] CubismModel.Drawables count: {(drawables != null ? drawables.Length.ToString() : "NULL")}");
+        }
         var cam = Camera.main;
         if (cam != null)
             Debug.Log($"[Live2DController] Camera orthoSize={cam.orthographicSize} clearFlags={cam.clearFlags} bgAlpha={cam.backgroundColor.a} pos={cam.transform.position}");
@@ -133,6 +139,26 @@ public class Live2DController : MonoBehaviour
         PlayState("Idle");
 
         Debug.Log("[Live2DController] Natori model ready.");
+
+        // Check mesh verts after 3 frames (filled by CubismUpdateController in LateUpdate)
+        StartCoroutine(DiagnoseAfterFrames(3));
+    }
+
+    private IEnumerator DiagnoseAfterFrames(int frames)
+    {
+        for (int i = 0; i < frames; i++) yield return null;
+        var renderers = _modelRoot.GetComponentsInChildren<CubismRenderer>(includeInactive: true);
+        if (renderers.Length > 0)
+        {
+            var mf = renderers[0].GetComponent<MeshFilter>();
+            Debug.Log($"[Live2DController] After {frames} frames: Renderer[0] mesh verts={( mf != null && mf.mesh != null ? mf.mesh.vertexCount.ToString() : "NULL")}");
+        }
+        var cubismModel = _modelRoot.GetComponent<Live2D.Cubism.Core.CubismModel>();
+        if (cubismModel != null)
+        {
+            var drawables = cubismModel.Drawables;
+            Debug.Log($"[Live2DController] After {frames} frames: Drawables={( drawables != null ? drawables.Length.ToString() : "NULL")}");
+        }
     }
 
     private AnimationClip LoadMotionClip(string motionName, bool loop)
