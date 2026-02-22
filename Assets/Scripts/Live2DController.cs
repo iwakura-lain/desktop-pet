@@ -3,21 +3,21 @@ using Live2D.Cubism.Framework.MotionFade;
 using UnityEngine;
 
 /// <summary>
-/// Loads the Natori Live2D model from its pre-built prefab in Resources/Live2D/Natori/
+/// Loads the Mao Live2D model from its pre-built prefab in Resources/Live2D/Mao/
 /// and maps PetController states (Idle / Clicked / Drag) to Live2D motions.
 ///
 /// Motion mapping:
-///   Idle    → mtn_00  (looping idle)
-///   Clicked → mtn_01  (tap reaction, one-shot)
-///   Drag    → mtn_02  (alternate tap, looping while dragged)
+///   Idle    → mtn_01  (looping idle)
+///   Clicked → mtn_02  (tap reaction, one-shot)
+///   Drag    → mtn_03  (alternate, looping while dragged)
 /// </summary>
 public class Live2DController : MonoBehaviour
 {
-    private const string PrefabResourcePath = "Live2D/Natori/Natori";
-    private const string MotionResourceBase = "Live2D/Natori/motions/";
-    private const string MotionIdle         = "mtn_00";
-    private const string MotionClicked      = "mtn_01";
-    private const string MotionDrag         = "mtn_02";
+    private const string PrefabResourcePath = "Live2D/Mao/Mao";
+    private const string MotionResourceBase = "Live2D/Mao/motions/";
+    private const string MotionIdle         = "mtn_01";
+    private const string MotionClicked      = "mtn_02";
+    private const string MotionDrag         = "mtn_03";
 
     private GameObject             _modelRoot;
     private CubismMotionController _motionCtrl;
@@ -74,7 +74,7 @@ public class Live2DController : MonoBehaviour
 
         PlayState("Idle");
 
-        Debug.Log("[Live2DController] Natori model loaded.");
+        Debug.Log("[Live2DController] Mao model loaded.");
     }
 
     private AnimationClip LoadMotionClip(string motionName, bool loop)
