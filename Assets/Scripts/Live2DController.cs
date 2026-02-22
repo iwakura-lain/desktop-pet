@@ -1,5 +1,6 @@
 using Live2D.Cubism.Framework.Motion;
 using Live2D.Cubism.Framework.MotionFade;
+using Live2D.Cubism.Rendering;
 using UnityEngine;
 
 /// <summary>
@@ -92,6 +93,22 @@ public class Live2DController : MonoBehaviour
         _modelRoot.transform.localScale    = Vector3.one;
 
         Debug.Log("[Live2DController] Natori prefab instantiated.");
+
+        // Diagnostics: check renderers, materials, camera
+        var renderers = _modelRoot.GetComponentsInChildren<CubismRenderer>(includeInactive: true);
+        Debug.Log($"[Live2DController] CubismRenderer count: {renderers.Length}");
+        if (renderers.Length > 0)
+        {
+            var r0 = renderers[0];
+            var mat = r0.Material;
+            Debug.Log($"[Live2DController] Renderer[0] active={r0.gameObject.activeInHierarchy} enabled={r0.enabled} mat={(mat != null ? mat.name : "NULL")}");
+            if (mat != null)
+                Debug.Log($"[Live2DController] Mat blend: SrcColor={mat.GetInt("_SrcColor")} DstColor={mat.GetInt("_DstColor")} SrcAlpha={mat.GetInt("_SrcAlpha")} DstAlpha={mat.GetInt("_DstAlpha")}");
+        }
+        var cam = Camera.main;
+        if (cam != null)
+            Debug.Log($"[Live2DController] Camera orthoSize={cam.orthographicSize} clearFlags={cam.clearFlags} bgAlpha={cam.backgroundColor.a} pos={cam.transform.position}");
+        Debug.Log($"[Live2DController] Model world pos={_modelRoot.transform.position} scale={_modelRoot.transform.lossyScale}");
 
         // --- 4. Add motion playback components if not already present ---
         if (_modelRoot.GetComponent<CubismFadeController>() == null)
