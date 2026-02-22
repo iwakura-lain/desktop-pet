@@ -38,8 +38,14 @@ public class Live2DController : MonoBehaviour
 
     public void PlayState(string state)
     {
-        if (_motionCtrl == null || state == _currentState) return;
+        if (_motionCtrl == null)
+        {
+            Debug.LogWarning($"[L2D] PlayState({state}) skipped: motionCtrl is null");
+            return;
+        }
+        if (state == _currentState) return;
         _currentState = state;
+        Debug.Log($"[L2D] PlayState -> {state}");
 
         switch (state)
         {
@@ -76,6 +82,7 @@ public class Live2DController : MonoBehaviour
         else
             Debug.LogWarning($"[Live2DController] fadeMotionList not found at Resources/{FadeMotionListPath}");
 
+        // Use existing CubismMotionController from prefab; only add if missing
         _motionCtrl = _modelRoot.GetComponent<CubismMotionController>();
         if (_motionCtrl == null)
             _motionCtrl = _modelRoot.AddComponent<CubismMotionController>();
@@ -84,6 +91,8 @@ public class Live2DController : MonoBehaviour
         _clipIdle    = LoadAnim(MotionIdle);
         _clipClicked = LoadAnim(MotionClicked);
         _clipDrag    = LoadAnim(MotionDrag);
+
+        Debug.Log($"[L2D] motionCtrl={_motionCtrl} clipIdle={_clipIdle} clipClicked={_clipClicked} clipDrag={_clipDrag}");
 
         PlayState("Idle");
 
