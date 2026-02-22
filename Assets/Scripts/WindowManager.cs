@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// Window manager — borderless, always-on-top, transparent background, draggable.
@@ -95,7 +96,20 @@ public class WindowManager : MonoBehaviour
 #if !UNITY_EDITOR && UNITY_STANDALONE_WIN
         if (_hwnd == IntPtr.Zero) return;
 
-        var  ray     = Camera.main.ScreenPointToRay(Input.mousePosition);
+        var mouse = Mouse.current;
+        if (mouse == null) return;
+
+        // Use Win32 GetCursorPos for reliable screen coordinates, convert to Unity viewport
+        GetCursorPos(out POINT cursorScreen);
+        GetWindowRect(_hwnd, out RECT winRect);
+        int winW = winRect.right  - winRect.left;
+        int winH = winRect.bottom - winRect.top;
+        float localX = cursorScreen.x - winRect.left;
+        float localY = cursorScreen.y - winRect.top;
+        // Unity screen coords: Y=0 at bottom
+        var unityPos = new Vector3(localX, winH - localY, 0f);
+
+        var  ray     = Camera.main.ScreenPointToRay(unityPos);
         var  hit     = Physics2D.GetRayIntersection(ray, Mathf.Infinity);
         bool overPet = hit.collider != null;
 
@@ -103,7 +117,7 @@ public class WindowManager : MonoBehaviour
         _diagFrames++;
         if (_diagFrames % 120 == 0)
         {
-            Debug.Log($"[WM] overPet={overPet} collider={hit.collider} mousePos={Input.mousePosition} isClickThrough={_isClickThrough}");
+            Debug.Log($"[WM] overPet={overPet} collider={hit.collider} unityPos={unityPos} isClickThrough={_isClickThrough}");
         }
 
         // Toggle click-through
@@ -118,32 +132,35 @@ public class WindowManager : MonoBehaviour
             Debug.Log($"[WM] clickThrough={_isClickThrough} overPet={overPet} exStyle=0x{ex:X}");
         }
 
+        bool leftDown  = mouse.leftButton.wasPressedThisFrame;
+        bool leftUp    = mouse.leftButton.wasReleasedThisFrame;
+        bool rightDown = mouse.rightButton.wasPressedThisFrame;
+
         // Manual mouse input
-        if (overPet && Input.GetMouseButtonDown(1))
+        if (overPet && rightDown)
         {
             Debug.Log("[WM] Right click on pet");
-            _petController?.OnRightClick(Input.mousePosition);
+            _petController?.OnRightClick(new Vector2(unityPos.x, unityPos.y));
         }
-        else if (overPet && Input.GetMouseButtonDown(0) && !_isDragging)
+        else if (overPet && leftDown && !_isDragging)
         {
             Debug.Log("[WM] Drag begin");
             _isDragging = true;
-            GetCursorPos(out _dragStart);
+            _dragStart = cursorScreen;
             GetWindowRect(_hwnd, out _winRectAtDragStart);
             _petController?.OnDragBegin();
         }
 
         if (_isDragging)
         {
-            GetCursorPos(out POINT cur);
             int w = _winRectAtDragStart.right  - _winRectAtDragStart.left;
             int h = _winRectAtDragStart.bottom - _winRectAtDragStart.top;
             MoveWindow(_hwnd,
-                _winRectAtDragStart.left + (cur.x - _dragStart.x),
-                _winRectAtDragStart.top  + (cur.y - _dragStart.y),
+                _winRectAtDragStart.left + (cursorScreen.x - _dragStart.x),
+                _winRectAtDragStart.top  + (cursorScreen.y - _dragStart.y),
                 w, h, false);
 
-            if (Input.GetMouseButtonUp(0))
+            if (leftUp)
             {
                 Debug.Log("[WM] Drag end");
                 _isDragging = false;
