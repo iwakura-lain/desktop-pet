@@ -1,7 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 /// <summary>
 /// Window manager — borderless, always-on-top, transparent background, draggable.
@@ -38,7 +37,11 @@ public class WindowManager : MonoBehaviour
     [DllImport("user32.dll")] private static extern bool   GetWindowRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] private static extern bool   MoveWindow(IntPtr h, int x, int y, int w, int ht, bool rep);
     [DllImport("user32.dll")] private static extern int    ShowWindow(IntPtr h, int cmd);
+    [DllImport("user32.dll")] private static extern short  GetAsyncKeyState(int vKey);
     [DllImport("Dwmapi.dll")] private static extern uint   DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS m);
+
+    private const int VK_LBUTTON = 0x01;
+    private const int VK_RBUTTON = 0x02;
 
     private IntPtr        _hwnd;
     private bool          _isDragging;
@@ -47,8 +50,10 @@ public class WindowManager : MonoBehaviour
     private PetController _petController;
 
 #if !UNITY_EDITOR && UNITY_STANDALONE_WIN
-    private bool _isClickThrough = true;
-    private int  _diagFrames     = 0;
+    private bool _isClickThrough  = true;
+    private int  _diagFrames      = 0;
+    private bool _prevLeftDown    = false;
+    private bool _prevRightDown   = false;
 #endif
 
     private void Start()
@@ -96,13 +101,9 @@ public class WindowManager : MonoBehaviour
 #if !UNITY_EDITOR && UNITY_STANDALONE_WIN
         if (_hwnd == IntPtr.Zero) return;
 
-        var mouse = Mouse.current;
-        if (mouse == null) return;
-
-        // Use Win32 GetCursorPos for reliable screen coordinates, convert to Unity viewport
+        // Win32-only mouse state — no dependency on Unity Input system
         GetCursorPos(out POINT cursorScreen);
         GetWindowRect(_hwnd, out RECT winRect);
-        int winW = winRect.right  - winRect.left;
         int winH = winRect.bottom - winRect.top;
         float localX = cursorScreen.x - winRect.left;
         float localY = cursorScreen.y - winRect.top;
@@ -132,21 +133,26 @@ public class WindowManager : MonoBehaviour
             Debug.Log($"[WM] clickThrough={_isClickThrough} overPet={overPet} exStyle=0x{ex:X}");
         }
 
-        bool leftDown  = mouse.leftButton.wasPressedThisFrame;
-        bool leftUp    = mouse.leftButton.wasReleasedThisFrame;
-        bool rightDown = mouse.rightButton.wasPressedThisFrame;
+        // GetAsyncKeyState: bit 15 = currently down, bit 0 = pressed since last call
+        bool leftDown  = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+        bool rightDown = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+        bool leftPressed  = leftDown  && !_prevLeftDown;
+        bool leftReleased = !leftDown && _prevLeftDown;
+        bool rightPressed = rightDown && !_prevRightDown;
+        _prevLeftDown  = leftDown;
+        _prevRightDown = rightDown;
 
         // Manual mouse input
-        if (overPet && rightDown)
+        if (overPet && rightPressed)
         {
             Debug.Log("[WM] Right click on pet");
             _petController?.OnRightClick(new Vector2(unityPos.x, unityPos.y));
         }
-        else if (overPet && leftDown && !_isDragging)
+        else if (overPet && leftPressed && !_isDragging)
         {
             Debug.Log("[WM] Drag begin");
             _isDragging = true;
-            _dragStart = cursorScreen;
+            _dragStart  = cursorScreen;
             GetWindowRect(_hwnd, out _winRectAtDragStart);
             _petController?.OnDragBegin();
         }
@@ -160,7 +166,7 @@ public class WindowManager : MonoBehaviour
                 _winRectAtDragStart.top  + (cursorScreen.y - _dragStart.y),
                 w, h, false);
 
-            if (leftUp)
+            if (leftReleased)
             {
                 Debug.Log("[WM] Drag end");
                 _isDragging = false;
