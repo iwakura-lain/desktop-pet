@@ -104,7 +104,13 @@ public class Live2DController : MonoBehaviour
             Debug.Log($"[Live2DController] Renderer[0] active={r0.gameObject.activeInHierarchy} enabled={r0.enabled} mat={(mat != null ? mat.name : "NULL")}");
             if (mat != null)
                 Debug.Log($"[Live2DController] Mat blend: SrcColor={mat.GetInt("_SrcColor")} DstColor={mat.GetInt("_DstColor")} SrcAlpha={mat.GetInt("_SrcAlpha")} DstAlpha={mat.GetInt("_DstAlpha")}");
+            // Check mesh
+            var mf = r0.GetComponent<MeshFilter>();
+            Debug.Log($"[Live2DController] Renderer[0] mesh={(mf != null && mf.mesh != null ? mf.mesh.name + " verts=" + mf.mesh.vertexCount : "NULL")}");
         }
+        // Check CubismModel on root
+        var cubismModel = _modelRoot.GetComponent<Live2D.Cubism.Core.CubismModel>();
+        Debug.Log($"[Live2DController] CubismModel on root: {(cubismModel != null ? "found enabled=" + cubismModel.enabled : "NOT FOUND")}");
         var cam = Camera.main;
         if (cam != null)
             Debug.Log($"[Live2DController] Camera orthoSize={cam.orthographicSize} clearFlags={cam.clearFlags} bgAlpha={cam.backgroundColor.a} pos={cam.transform.position}");
