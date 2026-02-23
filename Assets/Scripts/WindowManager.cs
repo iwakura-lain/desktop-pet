@@ -85,11 +85,9 @@ public class WindowManager : MonoBehaviour
     private bool          _isDragging;
     private PetController _petController;
 
-    // Height of the pet in world units (Live2D model is ~0.7 units tall at scale 1).
-    // Adjust this to change how large the pet appears on screen.
-    // The camera orthographicSize will be set so the pet occupies petScreenFraction of screen height.
-    [SerializeField] private float petWorldHeight    = 0.7f;
-    [SerializeField] private float petScreenFraction = 0.45f;  // 45% of screen height
+    // Scale multiplier applied to the Pet GameObject on macOS.
+    // Increase to make the pet larger. Default 3.0 = 3x the scene default scale.
+    [SerializeField] private float macOSPetScale = 3.0f;
 
     private void Start()
     {
@@ -98,19 +96,11 @@ public class WindowManager : MonoBehaviour
         var cam = Camera.main;
         if (cam != null)
         {
-#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-            // Windows: SolidColor black with alpha=0, DWM handles transparency
+            // Both platforms: transparent black background.
+            // On macOS, MTKView layer is set transparent in MacOS_ApplyWindowStyle
+            // so this SolidColor (alpha=0) punches through to the desktop.
             cam.clearFlags      = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
-#elif UNITY_STANDALONE_OSX && !UNITY_EDITOR
-            // macOS: Depth only — don't paint any background color,
-            // let the transparent NSWindow show through
-            cam.clearFlags      = CameraClearFlags.Depth;
-            cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
-#else
-            cam.clearFlags      = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
-#endif
         }
 
 #if (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
@@ -163,15 +153,13 @@ public class WindowManager : MonoBehaviour
         MacOS_ApplyWindowStyle();
         MacOS_SetIgnoreMouse(true);  // start click-through
 
-        // Scale the camera so the pet occupies petScreenFraction of screen height.
-        // orthographicSize = half of screen height in world units
-        // petWorldHeight / (2 * orthographicSize) = petScreenFraction
-        // => orthographicSize = petWorldHeight / (2 * petScreenFraction)
-        var cam = Camera.main;
-        if (cam != null && cam.orthographic)
-            cam.orthographicSize = petWorldHeight / (2f * petScreenFraction);
+        // Scale the Pet GameObject to make it larger on macOS.
+        // Find the "Pet" object (created by PetBootstrap).
+        var pet = GameObject.Find("Pet");
+        if (pet != null)
+            pet.transform.localScale = Vector3.one * macOSPetScale;
 
-        Debug.Log($"[WM] macOS {sw}x{sh} orthoSize={cam?.orthographicSize}");
+        Debug.Log($"[WM] macOS {sw}x{sh} petScale={macOSPetScale}");
     }
 #endif
 
