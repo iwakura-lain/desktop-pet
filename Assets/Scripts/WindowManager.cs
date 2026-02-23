@@ -85,6 +85,12 @@ public class WindowManager : MonoBehaviour
     private bool          _isDragging;
     private PetController _petController;
 
+    // Height of the pet in world units (Live2D model is ~0.7 units tall at scale 1).
+    // Adjust this to change how large the pet appears on screen.
+    // The camera orthographicSize will be set so the pet occupies petScreenFraction of screen height.
+    [SerializeField] private float petWorldHeight    = 0.7f;
+    [SerializeField] private float petScreenFraction = 0.25f;  // 25% of screen height
+
     private void Start()
     {
         _petController = FindFirstObjectByType<PetController>();
@@ -145,7 +151,16 @@ public class WindowManager : MonoBehaviour
 
         MacOS_ApplyWindowStyle();
         MacOS_SetIgnoreMouse(true);  // start click-through
-        Debug.Log($"[WM] macOS {sw}x{sh} initialized");
+
+        // Scale the camera so the pet occupies petScreenFraction of screen height.
+        // orthographicSize = half of screen height in world units
+        // petWorldHeight / (2 * orthographicSize) = petScreenFraction
+        // => orthographicSize = petWorldHeight / (2 * petScreenFraction)
+        var cam = Camera.main;
+        if (cam != null && cam.orthographic)
+            cam.orthographicSize = petWorldHeight / (2f * petScreenFraction);
+
+        Debug.Log($"[WM] macOS {sw}x{sh} orthoSize={cam?.orthographicSize}");
     }
 #endif
 
