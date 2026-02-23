@@ -9,8 +9,7 @@
 
 #import <Cocoa/Cocoa.h>
 #import <CoreGraphics/CoreGraphics.h>
-#import <Metal/Metal.h>
-#import <MetalKit/MetalKit.h>
+#import <QuartzCore/CAMetalLayer.h>
 #import <objc/runtime.h>
 
 // ---------------------------------------------------------------------------
@@ -22,6 +21,37 @@ static NSWindow* GetUnityWindow()
 }
 
 // ---------------------------------------------------------------------------
+// Helper: recursively find CAMetalLayer in a view hierarchy and make transparent
+// ---------------------------------------------------------------------------
+static void MakeMetalLayerTransparent(NSView* view)
+{
+    if (!view) return;
+
+    [view setWantsLayer:YES];
+
+    CALayer* layer = view.layer;
+    if (layer)
+    {
+        layer.opaque = NO;
+        layer.backgroundColor = CGColorGetConstantColor(kCGColorClear);
+
+        // If this is actually a CAMetalLayer, set pixel format to support alpha
+        if ([layer isKindOfClass:NSClassFromString(@"CAMetalLayer")])
+        {
+            // CAMetalLayer* metalLayer = (CAMetalLayer*)layer;
+            // Use KVC to set pixelFormat = MTLPixelFormatBGRA8Unorm (80)
+            // and framebufferOnly = NO to allow alpha compositing
+            [layer setValue:@(80) forKey:@"pixelFormat"];   // MTLPixelFormatBGRA8Unorm = 80
+            [layer setValue:@NO  forKey:@"opaque"];
+            [layer setValue:@NO  forKey:@"framebufferOnly"];
+        }
+    }
+
+    for (NSView* sub in view.subviews)
+        MakeMetalLayerTransparent(sub);
+}
+
+// ---------------------------------------------------------------------------
 // Window style — transparent, borderless, always on top
 // ---------------------------------------------------------------------------
 extern "C" void MacOS_ApplyWindowStyle()
@@ -29,46 +59,16 @@ extern "C" void MacOS_ApplyWindowStyle()
     NSWindow* win = GetUnityWindow();
     if (!win) return;
 
-    // Transparent background
+    // NSWindow transparent
     [win setOpaque:NO];
     [win setBackgroundColor:[NSColor clearColor]];
     [win setHasShadow:NO];
-
-    // Borderless
     [win setStyleMask:NSWindowStyleMaskBorderless];
-
-    // Always on top (floating above normal windows)
     [win setLevel:NSFloatingWindowLevel];
-
-    // Allow the window to receive mouse events by default
     [win setIgnoresMouseEvents:NO];
 
-    // Make the Metal/OpenGL view itself transparent so Unity's camera Depth
-    // clear mode shows the desktop through the window.
-    NSView* contentView = [win contentView];
-    if (contentView)
-    {
-        [contentView setWantsLayer:YES];
-        contentView.layer.backgroundColor = CGColorGetConstantColor(kCGColorClear);
-        contentView.layer.opaque = NO;
-
-        // Walk subviews to find MTKView and make it transparent
-        for (NSView* sub in contentView.subviews)
-        {
-            [sub setWantsLayer:YES];
-            sub.layer.backgroundColor = CGColorGetConstantColor(kCGColorClear);
-            sub.layer.opaque = NO;
-
-            // If this is an MTKView, also clear its Metal clearColor
-            if ([sub isKindOfClass:[MTKView class]])
-            {
-                MTKView* mtkView = (MTKView*)sub;
-                mtkView.clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
-                mtkView.layer.opaque = NO;
-                mtkView.layer.backgroundColor = CGColorGetConstantColor(kCGColorClear);
-            }
-        }
-    }
+    // Make every view and CAMetalLayer in the hierarchy transparent
+    MakeMetalLayerTransparent([win contentView]);
 }
 
 // ---------------------------------------------------------------------------
