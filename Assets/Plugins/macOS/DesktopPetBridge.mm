@@ -5,12 +5,55 @@
  * cursor position, mouse button state, and menu bar status item.
  *
  * Called from C# via [DllImport("__Internal")] on macOS builds.
+ *
+ * TRANSPARENCY STRATEGY:
+ * Unity's Metal framebuffer pixel format is fixed at creation time.
+ * We use +load to swizzle CAMetalLayer's init so every layer Unity
+ * creates is born with opaque=NO and a transparent pixel format.
+ * This runs before any Unity C# code, before the first frame renders.
  */
 
 #import <Cocoa/Cocoa.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
+
+// ---------------------------------------------------------------------------
+// Early-init: swizzle CAMetalLayer so every layer Unity creates is transparent
+// ---------------------------------------------------------------------------
+@interface CAMetalLayer (UnityTransparency)
++ (void)load;
+- (instancetype)unity_init;
+@end
+
+@implementation CAMetalLayer (UnityTransparency)
+
++ (void)load
+{
+    // Swizzle -init so every CAMetalLayer starts transparent
+    Method original = class_getInstanceMethod([CAMetalLayer class], @selector(init));
+    Method swizzled = class_getInstanceMethod([CAMetalLayer class], @selector(unity_init));
+    if (original && swizzled)
+        method_exchangeImplementations(original, swizzled);
+}
+
+- (instancetype)unity_init
+{
+    // Call original init (now named unity_init due to swizzle)
+    self = [self unity_init];
+    if (self)
+    {
+        self.opaque = NO;
+        self.backgroundColor = CGColorGetConstantColor(kCGColorClear);
+        // MTLPixelFormatBGRA8Unorm = 80, supports alpha channel
+        self.pixelFormat = MTLPixelFormatBGRA8Unorm;
+        self.framebufferOnly = NO;
+    }
+    return self;
+}
+
+@end
 
 // ---------------------------------------------------------------------------
 // Helper: get the main Unity window
@@ -21,32 +64,25 @@ static NSWindow* GetUnityWindow()
 }
 
 // ---------------------------------------------------------------------------
-// Helper: recursively find CAMetalLayer in a view hierarchy and make transparent
+// Helper: recursively make all layers in view hierarchy transparent
 // ---------------------------------------------------------------------------
 static void MakeMetalLayerTransparent(NSView* view)
 {
     if (!view) return;
-
     [view setWantsLayer:YES];
-
     CALayer* layer = view.layer;
     if (layer)
     {
         layer.opaque = NO;
         layer.backgroundColor = CGColorGetConstantColor(kCGColorClear);
-
-        // If this is actually a CAMetalLayer, set pixel format to support alpha
-        if ([layer isKindOfClass:NSClassFromString(@"CAMetalLayer")])
+        if ([layer isKindOfClass:[CAMetalLayer class]])
         {
-            // CAMetalLayer* metalLayer = (CAMetalLayer*)layer;
-            // Use KVC to set pixelFormat = MTLPixelFormatBGRA8Unorm (80)
-            // and framebufferOnly = NO to allow alpha compositing
-            [layer setValue:@(80) forKey:@"pixelFormat"];   // MTLPixelFormatBGRA8Unorm = 80
-            [layer setValue:@NO  forKey:@"opaque"];
-            [layer setValue:@NO  forKey:@"framebufferOnly"];
+            CAMetalLayer* ml = (CAMetalLayer*)layer;
+            ml.opaque = NO;
+            ml.pixelFormat = MTLPixelFormatBGRA8Unorm;
+            ml.framebufferOnly = NO;
         }
     }
-
     for (NSView* sub in view.subviews)
         MakeMetalLayerTransparent(sub);
 }
@@ -59,7 +95,6 @@ extern "C" void MacOS_ApplyWindowStyle()
     NSWindow* win = GetUnityWindow();
     if (!win) return;
 
-    // NSWindow transparent
     [win setOpaque:NO];
     [win setBackgroundColor:[NSColor clearColor]];
     [win setHasShadow:NO];
@@ -67,7 +102,7 @@ extern "C" void MacOS_ApplyWindowStyle()
     [win setLevel:NSFloatingWindowLevel];
     [win setIgnoresMouseEvents:NO];
 
-    // Make every view and CAMetalLayer in the hierarchy transparent
+    // Belt-and-suspenders: also fix any layers already created
     MakeMetalLayerTransparent([win contentView]);
 }
 
