@@ -89,7 +89,7 @@ public class WindowManager : MonoBehaviour
     // Adjust this to change how large the pet appears on screen.
     // The camera orthographicSize will be set so the pet occupies petScreenFraction of screen height.
     [SerializeField] private float petWorldHeight    = 0.7f;
-    [SerializeField] private float petScreenFraction = 0.25f;  // 25% of screen height
+    [SerializeField] private float petScreenFraction = 0.45f;  // 45% of screen height
 
     private void Start()
     {
@@ -98,8 +98,19 @@ public class WindowManager : MonoBehaviour
         var cam = Camera.main;
         if (cam != null)
         {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            // Windows: SolidColor black with alpha=0, DWM handles transparency
             cam.clearFlags      = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+#elif UNITY_STANDALONE_OSX && !UNITY_EDITOR
+            // macOS: Depth only — don't paint any background color,
+            // let the transparent NSWindow show through
+            cam.clearFlags      = CameraClearFlags.Depth;
+            cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+#else
+            cam.clearFlags      = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+#endif
         }
 
 #if (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR

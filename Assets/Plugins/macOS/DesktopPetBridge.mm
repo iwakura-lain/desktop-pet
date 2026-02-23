@@ -9,6 +9,8 @@
 
 #import <Cocoa/Cocoa.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <Metal/Metal.h>
+#import <MetalKit/MetalKit.h>
 #import <objc/runtime.h>
 
 // ---------------------------------------------------------------------------
@@ -41,8 +43,8 @@ extern "C" void MacOS_ApplyWindowStyle()
     // Allow the window to receive mouse events by default
     [win setIgnoresMouseEvents:NO];
 
-    // Make the Metal/OpenGL view itself transparent so Unity's clear color
-    // (RGBA 0,0,0,0) shows through to the desktop instead of painting black.
+    // Make the Metal/OpenGL view itself transparent so Unity's camera Depth
+    // clear mode shows the desktop through the window.
     NSView* contentView = [win contentView];
     if (contentView)
     {
@@ -50,12 +52,21 @@ extern "C" void MacOS_ApplyWindowStyle()
         contentView.layer.backgroundColor = CGColorGetConstantColor(kCGColorClear);
         contentView.layer.opaque = NO;
 
-        // Also make every subview (the actual MTKView) transparent
+        // Walk subviews to find MTKView and make it transparent
         for (NSView* sub in contentView.subviews)
         {
             [sub setWantsLayer:YES];
             sub.layer.backgroundColor = CGColorGetConstantColor(kCGColorClear);
             sub.layer.opaque = NO;
+
+            // If this is an MTKView, also clear its Metal clearColor
+            if ([sub isKindOfClass:[MTKView class]])
+            {
+                MTKView* mtkView = (MTKView*)sub;
+                mtkView.clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
+                mtkView.layer.opaque = NO;
+                mtkView.layer.backgroundColor = CGColorGetConstantColor(kCGColorClear);
+            }
         }
     }
 }
