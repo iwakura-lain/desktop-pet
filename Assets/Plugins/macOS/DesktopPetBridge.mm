@@ -1,16 +1,14 @@
 /**
  * DesktopPetBridge.mm
  * Objective-C bridge for macOS desktop pet window management.
- * Provides transparent window, click-through toggle, always-on-top,
- * cursor position, mouse button state, and menu bar status item.
- *
- * Called from C# via [DllImport("__Internal")] on macOS builds.
  *
  * TRANSPARENCY STRATEGY:
- * Unity's Metal framebuffer pixel format is fixed at creation time.
- * We use +load to swizzle CAMetalLayer's init so every layer Unity
- * creates is born with opaque=NO and a transparent pixel format.
- * This runs before any Unity C# code, before the first frame renders.
+ * Hook NSApplication via +load to intercept applicationDidFinishLaunching,
+ * which fires before Unity renders the first frame. At that point we make
+ * the window and its CAMetalLayer fully transparent.
+ *
+ * Also sets preserveFramebufferAlpha via PlayerSettings (must be 1 in
+ * ProjectSettings.asset).
  */
 
 #import <Cocoa/Cocoa.h>
@@ -20,37 +18,91 @@
 #import <objc/runtime.h>
 
 // ---------------------------------------------------------------------------
-// Early-init: swizzle CAMetalLayer so every layer Unity creates is transparent
+// Apply transparency to window + all Metal layers
 // ---------------------------------------------------------------------------
-@interface CAMetalLayer (UnityTransparency)
-+ (void)load;
-- (instancetype)unity_init;
+static void ApplyTransparencyToWindow(NSWindow* win)
+{
+    if (!win) return;
+
+    [win setOpaque:NO];
+    [win setBackgroundColor:[NSColor clearColor]];
+    [win setHasShadow:NO];
+
+    NSView* root = [win contentView];
+    if (!root) return;
+
+    // Recursively walk every view and fix its layer
+    NSMutableArray* stack = [NSMutableArray arrayWithObject:root];
+    while (stack.count > 0)
+    {
+        NSView* v = stack.lastObject;
+        [stack removeLastObject];
+
+        [v setWantsLayer:YES];
+        v.layer.opaque = NO;
+        v.layer.backgroundColor = CGColorGetConstantColor(kCGColorClear);
+
+        if ([v.layer isKindOfClass:[CAMetalLayer class]])
+        {
+            CAMetalLayer* ml = (CAMetalLayer*)v.layer;
+            ml.pixelFormat    = MTLPixelFormatBGRA8Unorm;
+            ml.opaque         = NO;
+            ml.framebufferOnly = NO;
+        }
+
+        for (NSView* child in v.subviews)
+            [stack addObject:child];
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Swizzle NSApplication delegate to hook applicationDidFinishLaunching
+// ---------------------------------------------------------------------------
+@interface NSObject (UnityTransparencyHook)
+- (void)unityTransparency_applicationDidFinishLaunching:(NSNotification*)n;
 @end
 
-@implementation CAMetalLayer (UnityTransparency)
+@implementation NSObject (UnityTransparencyHook)
+- (void)unityTransparency_applicationDidFinishLaunching:(NSNotification*)n
+{
+    // Call original
+    [self unityTransparency_applicationDidFinishLaunching:n];
+
+    // Apply transparency to all existing windows
+    for (NSWindow* win in [NSApplication sharedApplication].windows)
+        ApplyTransparencyToWindow(win);
+}
+@end
+
+// Use +load on a dummy class to install the swizzle at library load time
+@interface UnityTransparencyInstaller : NSObject
+@end
+
+@implementation UnityTransparencyInstaller
 
 + (void)load
 {
-    // Swizzle -init so every CAMetalLayer starts transparent
-    Method original = class_getInstanceMethod([CAMetalLayer class], @selector(init));
-    Method swizzled = class_getInstanceMethod([CAMetalLayer class], @selector(unity_init));
-    if (original && swizzled)
-        method_exchangeImplementations(original, swizzled);
-}
+    // We can't swizzle the delegate class now (it doesn't exist yet).
+    // Instead, observe NSApplicationDidFinishLaunchingNotification — this
+    // fires at the same time as the delegate method, before first frame.
+    [[NSNotificationCenter defaultCenter]
+        addObserverForName:NSApplicationDidFinishLaunchingNotification
+        object:nil
+        queue:[NSOperationQueue mainQueue]
+        usingBlock:^(NSNotification* n) {
+            for (NSWindow* win in [NSApplication sharedApplication].windows)
+                ApplyTransparencyToWindow(win);
+        }];
 
-- (instancetype)unity_init
-{
-    // Call original init (now named unity_init due to swizzle)
-    self = [self unity_init];
-    if (self)
-    {
-        self.opaque = NO;
-        self.backgroundColor = CGColorGetConstantColor(kCGColorClear);
-        // MTLPixelFormatBGRA8Unorm = 80, supports alpha channel
-        self.pixelFormat = MTLPixelFormatBGRA8Unorm;
-        self.framebufferOnly = NO;
-    }
-    return self;
+    // Also observe window creation in case Unity makes the window after launch
+    [[NSNotificationCenter defaultCenter]
+        addObserverForName:NSWindowDidBecomeKeyNotification
+        object:nil
+        queue:[NSOperationQueue mainQueue]
+        usingBlock:^(NSNotification* n) {
+            NSWindow* win = n.object;
+            if (win) ApplyTransparencyToWindow(win);
+        }];
 }
 
 @end
@@ -64,46 +116,17 @@ static NSWindow* GetUnityWindow()
 }
 
 // ---------------------------------------------------------------------------
-// Helper: recursively make all layers in view hierarchy transparent
-// ---------------------------------------------------------------------------
-static void MakeMetalLayerTransparent(NSView* view)
-{
-    if (!view) return;
-    [view setWantsLayer:YES];
-    CALayer* layer = view.layer;
-    if (layer)
-    {
-        layer.opaque = NO;
-        layer.backgroundColor = CGColorGetConstantColor(kCGColorClear);
-        if ([layer isKindOfClass:[CAMetalLayer class]])
-        {
-            CAMetalLayer* ml = (CAMetalLayer*)layer;
-            ml.opaque = NO;
-            ml.pixelFormat = MTLPixelFormatBGRA8Unorm;
-            ml.framebufferOnly = NO;
-        }
-    }
-    for (NSView* sub in view.subviews)
-        MakeMetalLayerTransparent(sub);
-}
-
-// ---------------------------------------------------------------------------
-// Window style — transparent, borderless, always on top
+// Window style — called from C# after Init (belt-and-suspenders)
 // ---------------------------------------------------------------------------
 extern "C" void MacOS_ApplyWindowStyle()
 {
     NSWindow* win = GetUnityWindow();
     if (!win) return;
 
-    [win setOpaque:NO];
-    [win setBackgroundColor:[NSColor clearColor]];
-    [win setHasShadow:NO];
+    ApplyTransparencyToWindow(win);
     [win setStyleMask:NSWindowStyleMaskBorderless];
     [win setLevel:NSFloatingWindowLevel];
     [win setIgnoresMouseEvents:NO];
-
-    // Belt-and-suspenders: also fix any layers already created
-    MakeMetalLayerTransparent([win contentView]);
 }
 
 // ---------------------------------------------------------------------------
