@@ -101,6 +101,13 @@ public class WindowManager : MonoBehaviour
             // so this SolidColor (alpha=0) punches through to the desktop.
             cam.clearFlags      = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+
+#if UNITY_STANDALONE_OSX && !UNITY_EDITOR
+            // Add AlphaBackground to force alpha=0 in background pixels after
+            // each frame, overriding Unity's built-in pipeline alpha overwrite.
+            if (cam.GetComponent<AlphaBackground>() == null)
+                cam.gameObject.AddComponent<AlphaBackground>();
+#endif
         }
 
 #if (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
