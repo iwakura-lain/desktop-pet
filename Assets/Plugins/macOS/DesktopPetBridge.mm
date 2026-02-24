@@ -78,40 +78,74 @@ static void ApplyTransparencyToWindow(NSWindow* win)
 @interface UnityTransparencyInstaller : NSObject
 @end
 
+// Try to apply transparency, retrying up to maxAttempts times with a short delay.
+// This handles the race between dylib load and Unity creating its Metal window.
+static void TryApplyTransparencyWithRetry(int attempt, int maxAttempts)
+{
+    NSWindow* win = GetUnityWindow();
+    if (win)
+    {
+        ApplyTransparencyToWindow(win);
+        return;
+    }
+    if (attempt >= maxAttempts) return;
+
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)),
+        dispatch_get_main_queue(),
+        ^{ TryApplyTransparencyWithRetry(attempt + 1, maxAttempts); }
+    );
+}
+
 @implementation UnityTransparencyInstaller
 
 + (void)load
 {
-    // We can't swizzle the delegate class now (it doesn't exist yet).
-    // Instead, observe NSApplicationDidFinishLaunchingNotification — this
-    // fires at the same time as the delegate method, before first frame.
+    // NSWindowDidBecomeVisibleNotification fires when any window is shown,
+    // including click-through windows that never become key/main.
     [[NSNotificationCenter defaultCenter]
-        addObserverForName:NSApplicationDidFinishLaunchingNotification
-        object:nil
-        queue:[NSOperationQueue mainQueue]
-        usingBlock:^(NSNotification* n) {
-            for (NSWindow* win in [NSApplication sharedApplication].windows)
-                ApplyTransparencyToWindow(win);
-        }];
-
-    // Also observe window creation in case Unity makes the window after launch
-    [[NSNotificationCenter defaultCenter]
-        addObserverForName:NSWindowDidBecomeKeyNotification
+        addObserverForName:NSWindowDidBecomeVisibleNotification
         object:nil
         queue:[NSOperationQueue mainQueue]
         usingBlock:^(NSNotification* n) {
             NSWindow* win = n.object;
             if (win) ApplyTransparencyToWindow(win);
         }];
+
+    // Also start a retry loop from launch in case the window is already visible.
+    [[NSNotificationCenter defaultCenter]
+        addObserverForName:NSApplicationDidFinishLaunchingNotification
+        object:nil
+        queue:[NSOperationQueue mainQueue]
+        usingBlock:^(NSNotification* n) {
+            // Retry up to 40 times (= 2s) at 50ms intervals
+            TryApplyTransparencyWithRetry(0, 40);
+        }];
 }
 
 @end
 
 // ---------------------------------------------------------------------------
-// Helper: get the main Unity window
+// Helper: get the Unity render window (the one with a CAMetalLayer).
+// Falls back to mainWindow if none found.
 // ---------------------------------------------------------------------------
 static NSWindow* GetUnityWindow()
 {
+    for (NSWindow* win in [NSApplication sharedApplication].windows)
+    {
+        NSView* root = [win contentView];
+        if (!root) continue;
+        NSMutableArray* stack = [NSMutableArray arrayWithObject:root];
+        while (stack.count > 0)
+        {
+            NSView* v = stack.lastObject;
+            [stack removeLastObject];
+            if ([v.layer isKindOfClass:[CAMetalLayer class]])
+                return win;
+            for (NSView* child in v.subviews)
+                [stack addObject:child];
+        }
+    }
     return [[NSApplication sharedApplication] mainWindow];
 }
 

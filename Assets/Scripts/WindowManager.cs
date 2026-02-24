@@ -142,7 +142,8 @@ public class WindowManager : MonoBehaviour
 #if UNITY_STANDALONE_OSX && !UNITY_EDITOR
     private IEnumerator InitWindowDelayed()
     {
-        for (int i = 0; i < 5; i++) yield return null;
+        // Wait 1 frame for Unity to finish initialization, then apply immediately.
+        yield return null;
 
         int sw = MacOS_GetScreenWidth();
         int sh = MacOS_GetScreenHeight();
