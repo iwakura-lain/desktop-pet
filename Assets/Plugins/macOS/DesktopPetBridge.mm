@@ -146,12 +146,17 @@ static void TryApplyTransparencyWithRetry(int attempt, int maxAttempts)
 @end
 
 // ---------------------------------------------------------------------------
-// Helper: get the Unity render window (the one with a CAMetalLayer).
-// Falls back to mainWindow if none found.
+// Helper: get the Unity render window.
+// Strategy: find the window with a CAMetalLayer first; if not found yet,
+// fall back to the first visible, on-screen window (Unity's main window
+// before the Metal layer is fully initialised).
 // ---------------------------------------------------------------------------
 static NSWindow* GetUnityWindow()
 {
-    for (NSWindow* win in [NSApplication sharedApplication].windows)
+    NSArray<NSWindow*>* windows = [NSApplication sharedApplication].windows;
+
+    // Pass 1: find the window that already has a CAMetalLayer
+    for (NSWindow* win in windows)
     {
         NSView* root = [win contentView];
         if (!root) continue;
@@ -166,16 +171,23 @@ static NSWindow* GetUnityWindow()
                 [stack addObject:child];
         }
     }
-    return [[NSApplication sharedApplication] mainWindow];
+
+    // Pass 2: fall back to the first visible on-screen window
+    for (NSWindow* win in windows)
+    {
+        if ([win isVisible] && [win isOnActiveSpace])
+            return win;
+    }
+
+    // Pass 3: last resort
+    return [NSApplication sharedApplication].mainWindow;
 }
 
 // ---------------------------------------------------------------------------
 // Window style — called from C# after Init (belt-and-suspenders)
 // ---------------------------------------------------------------------------
-extern "C" void MacOS_ApplyWindowStyle()
+static void ApplyWindowStyleNow()
 {
-    InstallCAMetalLayerSwizzle();  // ensure swizzle is active
-
     NSWindow* win = GetUnityWindow();
     if (!win) return;
 
@@ -183,6 +195,25 @@ extern "C" void MacOS_ApplyWindowStyle()
     [win setStyleMask:NSWindowStyleMaskBorderless];
     [win setLevel:NSFloatingWindowLevel];
     [win setIgnoresMouseEvents:NO];
+}
+
+extern "C" void MacOS_ApplyWindowStyle()
+{
+    InstallCAMetalLayerSwizzle();  // ensure swizzle is active
+
+    ApplyWindowStyleNow();
+
+    // If window wasn't found yet, retry a few times with short delays.
+    // This handles the case where MacOS_ApplyWindowStyle is called before
+    // the NSWindow is fully on screen.
+    for (int i = 1; i <= 5; i++)
+    {
+        dispatch_after(
+            dispatch_time(DISPATCH_TIME_NOW, (int64_t)(i * 0.1 * NSEC_PER_SEC)),
+            dispatch_get_main_queue(),
+            ^{ ApplyWindowStyleNow(); }
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
