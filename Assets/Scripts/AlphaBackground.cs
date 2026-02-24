@@ -25,10 +25,10 @@ public class AlphaBackground : MonoBehaviour
 
     private void Awake()
     {
-        var shader = Shader.Find("Hidden/AlphaBackground");
+        var shader = Resources.Load<Shader>("AlphaBackground");
         if (shader == null)
         {
-            Debug.LogError("[AlphaBackground] Shader 'Hidden/AlphaBackground' not found.");
+            Debug.LogError("[AlphaBackground] Resources/AlphaBackground.shader not found.");
             enabled = false;
             return;
         }
