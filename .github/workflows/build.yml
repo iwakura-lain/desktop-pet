@@ -96,11 +96,11 @@ jobs:
           MM=Assets/Plugins/macOS/DesktopPetBridge.mm
           OUT=Assets/Plugins/macOS/DesktopPetBridge.bundle
           # Compile for arm64
-          clang -arch arm64 -fobjc-arc -fmodules \
+          clang -arch arm64 -fobjc-arc -fmodules -lc++ \
             -framework Cocoa -framework QuartzCore -framework Metal \
             -dynamiclib -o /tmp/bridge_arm64.dylib "$MM"
           # Compile for x86_64
-          clang -arch x86_64 -fobjc-arc -fmodules \
+          clang -arch x86_64 -fobjc-arc -fmodules -lc++ \
             -framework Cocoa -framework QuartzCore -framework Metal \
             -dynamiclib -o /tmp/bridge_x86_64.dylib "$MM"
           # Combine into Universal binary bundle
