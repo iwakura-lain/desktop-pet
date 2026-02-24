@@ -353,7 +353,7 @@ extern "C" void MacOS_CreateStatusItem(const char* tooltip)
 {
     if (g_statusItem) return;
 
-    g_statusItem = [[[NSStatusBar systemStatusBar]
+    g_statusItem = [[NSStatusBar systemStatusBar]
                      statusItemWithLength:NSSquareStatusItemLength];
 
     // Draw a small white circle as icon
@@ -385,7 +385,6 @@ extern "C" void MacOS_RemoveStatusItem()
     if (g_statusItem)
     {
         [[NSStatusBar systemStatusBar] removeStatusItem:g_statusItem];
-        [g_statusItem release];
         g_statusItem = nil;
     }
 }
