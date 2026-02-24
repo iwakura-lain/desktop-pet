@@ -76,7 +76,7 @@ static void ApplyTransparencyToWindow(NSWindow* win)
         if ([v.layer isKindOfClass:[CAMetalLayer class]])
         {
             CAMetalLayer* ml = (CAMetalLayer*)v.layer;
-            ml.pixelFormat     = MTLPixelFormatBGRA8Unorm;
+            ml.pixelFormat     = MTLPixelFormatBGRA8Unorm_sRGB;
             // Note: setOpaque: is swizzled above so this always becomes NO
             ml.opaque          = NO;
             ml.framebufferOnly = NO;
