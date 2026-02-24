@@ -3,12 +3,14 @@
  * Objective-C bridge for macOS desktop pet window management.
  *
  * TRANSPARENCY STRATEGY:
- * Hook NSApplication via +load to intercept applicationDidFinishLaunching,
- * which fires before Unity renders the first frame. At that point we make
- * the window and its CAMetalLayer fully transparent.
+ * 1. Swizzle CAMetalLayer's -setOpaque: to always force NO, so Unity can
+ *    never reset the Metal layer back to opaque after we patch it.
+ * 2. Observe NSWindowDidBecomeVisibleNotification to patch the window as
+ *    soon as it appears.
+ * 3. Retry-loop via dispatch_after to handle the race between dylib load
+ *    and Unity creating its Metal window.
  *
- * Also sets preserveFramebufferAlpha via PlayerSettings (must be 1 in
- * ProjectSettings.asset).
+ * preserveFramebufferAlpha must be 1 in ProjectSettings.asset.
  */
 
 #import <Cocoa/Cocoa.h>
@@ -16,6 +18,35 @@
 #import <QuartzCore/CAMetalLayer.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
+
+// ---------------------------------------------------------------------------
+// Swizzle CAMetalLayer -setOpaque: — intercept any attempt to set opaque=YES
+// ---------------------------------------------------------------------------
+@interface CAMetalLayer (ForceTransparent)
+- (void)forceTransparent_setOpaque:(BOOL)opaque;
+@end
+
+@implementation CAMetalLayer (ForceTransparent)
+- (void)forceTransparent_setOpaque:(BOOL)opaque
+{
+    // Always call through with NO, regardless of what Unity requests
+    [self forceTransparent_setOpaque:NO];
+}
+@end
+
+static void InstallCAMetalLayerSwizzle()
+{
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        Class cls = [CAMetalLayer class];
+        SEL original = @selector(setOpaque:);
+        SEL replacement = @selector(forceTransparent_setOpaque:);
+        Method origMethod = class_getInstanceMethod(cls, original);
+        Method replMethod = class_getInstanceMethod(cls, replacement);
+        if (origMethod && replMethod)
+            method_exchangeImplementations(origMethod, replMethod);
+    });
+}
 
 // ---------------------------------------------------------------------------
 // Apply transparency to window + all Metal layers
@@ -45,8 +76,9 @@ static void ApplyTransparencyToWindow(NSWindow* win)
         if ([v.layer isKindOfClass:[CAMetalLayer class]])
         {
             CAMetalLayer* ml = (CAMetalLayer*)v.layer;
-            ml.pixelFormat    = MTLPixelFormatBGRA8Unorm;
-            ml.opaque         = NO;
+            ml.pixelFormat     = MTLPixelFormatBGRA8Unorm;
+            // Note: setOpaque: is swizzled above so this always becomes NO
+            ml.opaque          = NO;
             ml.framebufferOnly = NO;
         }
 
@@ -55,28 +87,12 @@ static void ApplyTransparencyToWindow(NSWindow* win)
     }
 }
 
-// ---------------------------------------------------------------------------
-// Swizzle NSApplication delegate to hook applicationDidFinishLaunching
-// ---------------------------------------------------------------------------
-@interface NSObject (UnityTransparencyHook)
-- (void)unityTransparency_applicationDidFinishLaunching:(NSNotification*)n;
-@end
-
-@implementation NSObject (UnityTransparencyHook)
-- (void)unityTransparency_applicationDidFinishLaunching:(NSNotification*)n
-{
-    // Call original
-    [self unityTransparency_applicationDidFinishLaunching:n];
-
-    // Apply transparency to all existing windows
-    for (NSWindow* win in [NSApplication sharedApplication].windows)
-        ApplyTransparencyToWindow(win);
-}
-@end
-
-// Use +load on a dummy class to install the swizzle at library load time
+// Use +load on a dummy class to install swizzles at library load time
 @interface UnityTransparencyInstaller : NSObject
 @end
+
+// Forward declaration
+static NSWindow* GetUnityWindow();
 
 // Try to apply transparency, retrying up to maxAttempts times with a short delay.
 // This handles the race between dylib load and Unity creating its Metal window.
@@ -101,6 +117,10 @@ static void TryApplyTransparencyWithRetry(int attempt, int maxAttempts)
 
 + (void)load
 {
+    // Install CAMetalLayer swizzle first — must happen before Unity creates
+    // its Metal layer so any subsequent setOpaque:YES calls are intercepted.
+    InstallCAMetalLayerSwizzle();
+
     // NSWindowDidBecomeVisibleNotification fires when any window is shown,
     // including click-through windows that never become key/main.
     [[NSNotificationCenter defaultCenter]
@@ -154,6 +174,8 @@ static NSWindow* GetUnityWindow()
 // ---------------------------------------------------------------------------
 extern "C" void MacOS_ApplyWindowStyle()
 {
+    InstallCAMetalLayerSwizzle();  // ensure swizzle is active
+
     NSWindow* win = GetUnityWindow();
     if (!win) return;
 
