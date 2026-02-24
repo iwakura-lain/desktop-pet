@@ -91,6 +91,35 @@ jobs:
             Library-StandaloneOSX-
             Library-
 
+      - name: Compile ObjC plugin into Universal bundle
+        run: |
+          MM=Assets/Plugins/macOS/DesktopPetBridge.mm
+          OUT=Assets/Plugins/macOS/DesktopPetBridge.bundle
+          # Compile for arm64
+          clang -arch arm64 -fobjc-arc -fmodules \
+            -framework Cocoa -framework QuartzCore -framework Metal \
+            -dynamiclib -o /tmp/bridge_arm64.dylib "$MM"
+          # Compile for x86_64
+          clang -arch x86_64 -fobjc-arc -fmodules \
+            -framework Cocoa -framework QuartzCore -framework Metal \
+            -dynamiclib -o /tmp/bridge_x86_64.dylib "$MM"
+          # Combine into Universal binary bundle
+          mkdir -p "$OUT/Contents/MacOS"
+          lipo -create /tmp/bridge_arm64.dylib /tmp/bridge_x86_64.dylib \
+            -output "$OUT/Contents/MacOS/DesktopPetBridge"
+          # Create minimal Info.plist
+          cat > "$OUT/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleExecutable</key><string>DesktopPetBridge</string>
+            <key>CFBundleIdentifier</key><string>com.defaultcompany.desktoppetbridge</string>
+            <key>CFBundlePackageType</key><string>BNDL</string>
+          </dict></plist>
+          PLIST
+          echo "Bundle built:"
+          file "$OUT/Contents/MacOS/DesktopPetBridge"
+
       - name: Build project (macOS)
         uses: game-ci/unity-builder@v4
         env:
