@@ -32,6 +32,7 @@ public class AlphaBackground : MonoBehaviour
             enabled = false;
             return;
         }
+        Debug.Log("[AlphaBackground] Shader loaded OK: " + shader.name);
         _mat = new Material(shader);
         _mat.hideFlags = HideFlags.HideAndDontSave;
 
@@ -46,16 +47,18 @@ public class AlphaBackground : MonoBehaviour
         };
         _quad.triangles = new int[] { 0, 1, 2, 0, 2, 3 };
         _quad.hideFlags = HideFlags.HideAndDontSave;
+        Debug.Log("[AlphaBackground] Awake complete, OnPostRender will run each frame.");
     }
 
+    private bool _loggedOnce = false;
     private void OnPostRender()
     {
         if (_mat == null || _quad == null) return;
-
-        // Draw fullscreen quad with shader that sets alpha=0.
-        // ColorMask A means only alpha channel is written; RGB is untouched.
-        // This punches out the background alpha so macOS compositor treats
-        // those pixels as transparent.
+        if (!_loggedOnce)
+        {
+            Debug.Log("[AlphaBackground] OnPostRender executing, drawing alpha=0 quad.");
+            _loggedOnce = true;
+        }
         _mat.SetPass(0);
         Graphics.DrawMeshNow(_quad, Matrix4x4.identity);
     }

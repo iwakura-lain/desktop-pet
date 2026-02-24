@@ -18,6 +18,28 @@
 #import <QuartzCore/CAMetalLayer.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
+#import <Metal/Metal.h>
+
+// ---------------------------------------------------------------------------
+// Diagnostics: write to ~/Desktop/desktop-pet-diag.log
+// ---------------------------------------------------------------------------
+static void DiagLog(NSString* msg)
+{
+    NSString* path = [NSHomeDirectory() stringByAppendingPathComponent:@"Desktop/desktop-pet-diag.log"];
+    NSString* line = [NSString stringWithFormat:@"%@  %@\n",
+        [NSDateFormatter localizedStringFromDate:[NSDate date]
+            dateStyle:NSDateFormatterNoStyle
+            timeStyle:NSDateFormatterMediumStyle],
+        msg];
+    NSFileHandle* fh = [NSFileHandle fileHandleForWritingAtPath:path];
+    if (!fh) {
+        [@"" writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:nil];
+        fh = [NSFileHandle fileHandleForWritingAtPath:path];
+    }
+    [fh seekToEndOfFile];
+    [fh writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+    [fh closeFile];
+}
 
 // ---------------------------------------------------------------------------
 // Swizzle CAMetalLayer -setOpaque: — intercept any attempt to set opaque=YES
@@ -43,8 +65,12 @@ static void InstallCAMetalLayerSwizzle()
         SEL replacement = @selector(forceTransparent_setOpaque:);
         Method origMethod = class_getInstanceMethod(cls, original);
         Method replMethod = class_getInstanceMethod(cls, replacement);
-        if (origMethod && replMethod)
+        if (origMethod && replMethod) {
             method_exchangeImplementations(origMethod, replMethod);
+            DiagLog(@"[SWIZZLE] CAMetalLayer.setOpaque: swizzled OK");
+        } else {
+            DiagLog(@"[SWIZZLE] FAILED to swizzle CAMetalLayer.setOpaque:");
+        }
     });
 }
 
@@ -55,9 +81,13 @@ static void ApplyTransparencyToWindow(NSWindow* win)
 {
     if (!win) return;
 
+    DiagLog([NSString stringWithFormat:@"[APPLY] win=%@ opaque_before=%d", win, (int)[win isOpaque]]);
+
     [win setOpaque:NO];
     [win setBackgroundColor:[NSColor clearColor]];
     [win setHasShadow:NO];
+
+    DiagLog([NSString stringWithFormat:@"[APPLY] after setOpaque:NO => isOpaque=%d", (int)[win isOpaque]]);
 
     NSView* root = [win contentView];
     if (!root) return;
@@ -76,10 +106,14 @@ static void ApplyTransparencyToWindow(NSWindow* win)
         if ([v.layer isKindOfClass:[CAMetalLayer class]])
         {
             CAMetalLayer* ml = (CAMetalLayer*)v.layer;
+            DiagLog([NSString stringWithFormat:@"[METAL] found CAMetalLayer pixFmt=%lu opaque_before=%d",
+                (unsigned long)ml.pixelFormat, (int)ml.isOpaque]);
             ml.pixelFormat     = MTLPixelFormatBGRA8Unorm_sRGB;
             // Note: setOpaque: is swizzled above so this always becomes NO
             ml.opaque          = NO;
             ml.framebufferOnly = NO;
+            DiagLog([NSString stringWithFormat:@"[METAL] after patch: pixFmt=%lu opaque=%d framebufferOnly=%d",
+                (unsigned long)ml.pixelFormat, (int)ml.isOpaque, (int)ml.framebufferOnly]);
         }
 
         for (NSView* child in v.subviews)
@@ -117,6 +151,7 @@ static void TryApplyTransparencyWithRetry(int attempt, int maxAttempts)
 
 + (void)load
 {
+    DiagLog(@"[LOAD] UnityTransparencyInstaller +load called");
     // Install CAMetalLayer swizzle first — must happen before Unity creates
     // its Metal layer so any subsequent setOpaque:YES calls are intercepted.
     InstallCAMetalLayerSwizzle();
@@ -189,12 +224,15 @@ static NSWindow* GetUnityWindow()
 static void ApplyWindowStyleNow()
 {
     NSWindow* win = GetUnityWindow();
+    DiagLog([NSString stringWithFormat:@"[STYLE] ApplyWindowStyleNow win=%@", win]);
     if (!win) return;
 
     ApplyTransparencyToWindow(win);
     [win setStyleMask:NSWindowStyleMaskBorderless];
     [win setLevel:NSFloatingWindowLevel];
     [win setIgnoresMouseEvents:NO];
+    DiagLog([NSString stringWithFormat:@"[STYLE] done: styleMask=%lu level=%ld isOpaque=%d",
+        (unsigned long)[win styleMask], (long)[win level], (int)[win isOpaque]]);
 }
 
 extern "C" void MacOS_ApplyWindowStyle()
