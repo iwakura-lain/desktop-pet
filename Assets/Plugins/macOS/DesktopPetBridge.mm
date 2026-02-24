@@ -5,7 +5,7 @@
  * TRANSPARENCY STRATEGY:
  * 1. Swizzle CAMetalLayer's -setOpaque: to always force NO, so Unity can
  *    never reset the Metal layer back to opaque after we patch it.
- * 2. Observe NSWindowDidBecomeVisibleNotification to patch the window as
+ * 2. Observe NSWindowDidOrderOnScreenNotification to patch the window as
  *    soon as it appears.
  * 3. Retry-loop via dispatch_after to handle the race between dylib load
  *    and Unity creating its Metal window.
@@ -156,10 +156,10 @@ static void TryApplyTransparencyWithRetry(int attempt, int maxAttempts)
     // its Metal layer so any subsequent setOpaque:YES calls are intercepted.
     InstallCAMetalLayerSwizzle();
 
-    // NSWindowDidBecomeVisibleNotification fires when any window is shown,
+    // NSWindowDidOrderOnScreenNotification fires when any window becomes visible,
     // including click-through windows that never become key/main.
     [[NSNotificationCenter defaultCenter]
-        addObserverForName:NSWindowDidBecomeVisibleNotification
+        addObserverForName:@"NSWindowDidOrderOnScreenNotification"
         object:nil
         queue:[NSOperationQueue mainQueue]
         usingBlock:^(NSNotification* n) {
@@ -354,7 +354,7 @@ extern "C" void MacOS_CreateStatusItem(const char* tooltip)
     if (g_statusItem) return;
 
     g_statusItem = [[[NSStatusBar systemStatusBar]
-                     statusItemWithLength:NSSquareStatusItemLength] retain];
+                     statusItemWithLength:NSSquareStatusItemLength];
 
     // Draw a small white circle as icon
     NSImage* icon = [[NSImage alloc] initWithSize:NSMakeSize(16, 16)];
