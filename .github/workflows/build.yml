@@ -132,6 +132,7 @@ jobs:
           buildName:       desktop-pet
           buildsPath:      build
           customParameters: -architecture Universal
+          allowDirtyBuild: true
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
