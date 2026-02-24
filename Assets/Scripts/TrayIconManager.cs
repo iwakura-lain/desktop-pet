@@ -130,9 +130,9 @@ public class TrayIconManager : MonoBehaviour
     // =========================================================================
 #if UNITY_STANDALONE_OSX && !UNITY_EDITOR
 
-    [DllImport("__Internal")] private static extern void MacOS_CreateStatusItem(string tooltip);
-    [DllImport("__Internal")] private static extern void MacOS_RemoveStatusItem();
-    [DllImport("__Internal")] private static extern void MacOS_SetWindowVisible(bool visible);
+    [DllImport("DesktopPetBridge")] private static extern void MacOS_CreateStatusItem(string tooltip);
+    [DllImport("DesktopPetBridge")] private static extern void MacOS_RemoveStatusItem();
+    [DllImport("DesktopPetBridge")] private static extern void MacOS_SetWindowVisible(bool visible);
 
     private void Start()  => MacOS_CreateStatusItem(tooltipText);
     private void OnDestroy() => MacOS_RemoveStatusItem();

@@ -61,14 +61,14 @@ public class WindowManager : MonoBehaviour
     // macOS P/Invoke (Objective-C bridge in Assets/Plugins/macOS/DesktopPetBridge.mm)
     // -------------------------------------------------------------------------
 #if UNITY_STANDALONE_OSX && !UNITY_EDITOR
-    [DllImport("__Internal")] private static extern void MacOS_ApplyWindowStyle();
-    [DllImport("__Internal")] private static extern void MacOS_SetIgnoreMouse(bool ignore);
-    [DllImport("__Internal")] private static extern void MacOS_GetCursorPos(out float x, out float y);
-    [DllImport("__Internal")] private static extern bool MacOS_IsMouseButtonDown(int button);
-    [DllImport("__Internal")] private static extern void MacOS_MoveWindow(float x, float y, float w, float h);
-    [DllImport("__Internal")] private static extern void MacOS_GetWindowRect(out float x, out float y, out float w, out float h);
-    [DllImport("__Internal")] private static extern int  MacOS_GetScreenWidth();
-    [DllImport("__Internal")] private static extern int  MacOS_GetScreenHeight();
+    [DllImport("DesktopPetBridge")] private static extern void MacOS_ApplyWindowStyle();
+    [DllImport("DesktopPetBridge")] private static extern void MacOS_SetIgnoreMouse(bool ignore);
+    [DllImport("DesktopPetBridge")] private static extern void MacOS_GetCursorPos(out float x, out float y);
+    [DllImport("DesktopPetBridge")] private static extern bool MacOS_IsMouseButtonDown(int button);
+    [DllImport("DesktopPetBridge")] private static extern void MacOS_MoveWindow(float x, float y, float w, float h);
+    [DllImport("DesktopPetBridge")] private static extern void MacOS_GetWindowRect(out float x, out float y, out float w, out float h);
+    [DllImport("DesktopPetBridge")] private static extern int  MacOS_GetScreenWidth();
+    [DllImport("DesktopPetBridge")] private static extern int  MacOS_GetScreenHeight();
 
     private bool  _isClickThrough  = true;
     private int   _diagFrames      = 0;
