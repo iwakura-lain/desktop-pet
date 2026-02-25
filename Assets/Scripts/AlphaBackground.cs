@@ -9,16 +9,17 @@ public class AlphaBackground : MonoBehaviour
     private void Awake()
     {
         _cam = GetComponent<Camera>();
-        // Use Depth clear so Unity doesn't overwrite the GL.Clear we do in OnPreRender
-        _cam.clearFlags = CameraClearFlags.Depth;
-        Debug.Log("[AlphaBackground] Awake: set clearFlags=Depth");
+        // Nothing = Unity does NO clear at all, so our GL.Clear below is the only one.
+        // If we use SolidColor or Depth, Unity's Metal loadAction fires AFTER OnPreRender
+        // and overwrites our alpha=0 with alpha=1.
+        _cam.clearFlags = CameraClearFlags.Nothing;
+        Debug.Log("[AlphaBackground] Awake: set clearFlags=Nothing");
     }
 
     private void OnPreRender()
     {
-        // Manually clear color (RGBA=0,0,0,0) + depth each frame.
-        // GL.Clear writes alpha=0 into the Metal framebuffer loadAction,
-        // which is what preserveFramebufferAlpha=1 needs to show transparency.
+        // With clearFlags=Nothing Unity skips its internal Metal clear entirely.
+        // GL.Clear here is the only clear — writes RGBA=(0,0,0,0) + depth reset.
         GL.Clear(true, true, new Color(0f, 0f, 0f, 0f));
     }
 
