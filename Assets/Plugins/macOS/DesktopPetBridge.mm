@@ -41,11 +41,16 @@ static void DiagLog(NSString* msg)
 static void ApplyTransparencyToWindow(NSWindow* win)
 {
     if (!win) return;
-    DiagLog([NSString stringWithFormat:@"[APPLY] opaque_before=%d", (int)[win isOpaque]]);
+    DiagLog([NSString stringWithFormat:@"[APPLY] opaque_before=%d bg=%@ styleMask=%lu level=%ld",
+        (int)[win isOpaque],
+        [win backgroundColor],
+        (unsigned long)[win styleMask],
+        (long)[win level]]);
     [win setOpaque:NO];
     [win setBackgroundColor:[NSColor clearColor]];
     [win setHasShadow:NO];
-    DiagLog([NSString stringWithFormat:@"[APPLY] opaque_after=%d", (int)[win isOpaque]]);
+    DiagLog([NSString stringWithFormat:@"[APPLY] opaque_after=%d hasShadow=%d",
+        (int)[win isOpaque], (int)[win hasShadow]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -118,11 +123,21 @@ extern "C" void MacOS_ApplyWindowStyle()
 {
     DiagLog(@"[STYLE] MacOS_ApplyWindowStyle called");
     NSWindow* win = GetUnityWindow();
+    DiagLog([NSString stringWithFormat:@"[STYLE] GetUnityWindow=%@ windowCount=%lu",
+        win, (unsigned long)[NSApplication sharedApplication].windows.count]);
     if (win) {
         ApplyTransparencyToWindow(win);
         [win setStyleMask:NSWindowStyleMaskBorderless];
         [win setLevel:NSFloatingWindowLevel];
-        DiagLog([NSString stringWithFormat:@"[STYLE] done isOpaque=%d", (int)[win isOpaque]]);
+        // Log contentView and layer state
+        NSView* cv = [win contentView];
+        DiagLog([NSString stringWithFormat:@"[STYLE] done isOpaque=%d styleMask=%lu level=%ld contentView=%@ wantsLayer=%d layer=%@",
+            (int)[win isOpaque],
+            (unsigned long)[win styleMask],
+            (long)[win level],
+            cv,
+            (int)[cv wantsLayer],
+            [cv layer]]);
     }
     // Also schedule retries in case the window isn't ready yet
     for (int i = 1; i <= 5; i++) {
@@ -131,7 +146,10 @@ extern "C" void MacOS_ApplyWindowStyle()
             dispatch_get_main_queue(),
             ^{
                 NSWindow* w = GetUnityWindow();
-                if (w) ApplyTransparencyToWindow(w);
+                if (w) {
+                    ApplyTransparencyToWindow(w);
+                    DiagLog([NSString stringWithFormat:@"[RETRY %d] isOpaque=%d", i, (int)[w isOpaque]]);
+                }
             }
         );
     }

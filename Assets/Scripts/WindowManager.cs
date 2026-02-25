@@ -101,13 +101,19 @@ public class WindowManager : MonoBehaviour
             // so this SolidColor (alpha=0) punches through to the desktop.
             cam.clearFlags      = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+            Debug.Log($"[WM] Start: cam.clearFlags={cam.clearFlags} backgroundColor={cam.backgroundColor}");
 
 #if UNITY_STANDALONE_OSX && !UNITY_EDITOR
             // Add AlphaBackground to force alpha=0 in background pixels after
             // each frame, overriding Unity's built-in pipeline alpha overwrite.
             if (cam.GetComponent<AlphaBackground>() == null)
                 cam.gameObject.AddComponent<AlphaBackground>();
+            Debug.Log($"[WM] AlphaBackground component: {cam.GetComponent<AlphaBackground>() != null}");
 #endif
+        }
+        else
+        {
+            Debug.LogError("[WM] Camera.main is NULL in Start!");
         }
 
 #if (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
@@ -154,12 +160,20 @@ public class WindowManager : MonoBehaviour
 
         int sw = MacOS_GetScreenWidth();
         int sh = MacOS_GetScreenHeight();
+        Debug.Log($"[WM] macOS screen={sw}x{sh}");
         Screen.SetResolution(sw, sh, false);
         yield return null;
         MacOS_MoveWindow(0, 0, sw, sh);
+        Debug.Log($"[WM] macOS MoveWindow(0,0,{sw},{sh}) done");
 
         MacOS_ApplyWindowStyle();
+        Debug.Log("[WM] macOS MacOS_ApplyWindowStyle() called");
         MacOS_SetIgnoreMouse(true);  // start click-through
+
+        // Log camera state after init
+        var cam = Camera.main;
+        if (cam != null)
+            Debug.Log($"[WM] post-init cam.clearFlags={cam.clearFlags} bg={cam.backgroundColor} allowHDR={cam.allowHDR} targetTexture={cam.targetTexture}");
 
         // Scale the Pet GameObject to make it larger on macOS.
         // Find the "Pet" object (created by PetBootstrap).

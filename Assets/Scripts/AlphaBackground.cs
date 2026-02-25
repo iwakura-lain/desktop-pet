@@ -51,17 +51,29 @@ public class AlphaBackground : MonoBehaviour
         Debug.Log("[AlphaBackground] Awake complete, OnPostRender will run each frame.");
     }
 
-    private bool _loggedOnce = false;
+    private int _frameCount = 0;
     private void OnPostRender()
     {
         if (_mat == null || _quad == null) return;
-        if (!_loggedOnce)
+        _frameCount++;
+
+        // Log first frame, then every 300 frames
+        if (_frameCount == 1 || _frameCount % 300 == 0)
         {
-            Debug.Log("[AlphaBackground] OnPostRender executing, drawing alpha=0 quad.");
-            _loggedOnce = true;
+            var cam = GetComponent<Camera>();
+            Debug.Log($"[AlphaBackground] frame={_frameCount} OnPostRender OK" +
+                $" | cam.clearFlags={cam.clearFlags}" +
+                $" | cam.backgroundColor={cam.backgroundColor}" +
+                $" | cam.allowHDR={cam.allowHDR}" +
+                $" | mat={_mat != null}" +
+                $" | shader={_mat?.shader?.name}");
         }
+
         _mat.SetPass(0);
         Graphics.DrawMeshNow(_quad, Matrix4x4.identity);
+
+        if (_frameCount == 1)
+            Debug.Log("[AlphaBackground] DrawMeshNow called — alpha=0 quad drawn.");
     }
 
     private void OnDestroy()
