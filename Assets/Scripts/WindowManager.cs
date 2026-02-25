@@ -96,24 +96,14 @@ public class WindowManager : MonoBehaviour
         var cam = Camera.main;
         if (cam != null)
         {
-            // macOS: use Depth Only so Unity does NOT clear the color buffer.
-            // With NSWindow opaque=NO + preserveFramebufferAlpha=1, the Metal
-            // layer's transparent pixels show the desktop underneath.
-            // SolidColor clear writes alpha=1 in Metal's loadAction even when
-            // backgroundColor.a=0, which is why the background stays black.
-#if UNITY_STANDALONE_OSX && !UNITY_EDITOR
-            cam.clearFlags      = CameraClearFlags.Depth;
-            cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
-#else
             cam.clearFlags      = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
-#endif
             Debug.Log($"[WM] Start: cam.clearFlags={cam.clearFlags} backgroundColor={cam.backgroundColor}");
 
 #if UNITY_STANDALONE_OSX && !UNITY_EDITOR
+            // AlphaBackground handles the actual transparent clear via GL.Clear in OnPreRender
             if (cam.GetComponent<AlphaBackground>() == null)
                 cam.gameObject.AddComponent<AlphaBackground>();
-            Debug.Log($"[WM] AlphaBackground component: {cam.GetComponent<AlphaBackground>() != null}");
 #endif
         }
         else

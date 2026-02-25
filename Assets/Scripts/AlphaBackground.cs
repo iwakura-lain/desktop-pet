@@ -1,85 +1,33 @@
 using UnityEngine;
 
-/// <summary>
-/// Forces background pixels' alpha to 0 after the scene renders on macOS,
-/// so the desktop shows through the transparent areas.
-///
-/// Unity's Built-in pipeline overwrites the framebuffer alpha during its
-/// final composite. This component runs OnPostRender to draw a fullscreen
-/// quad that only writes ColorMask A = 0 into pixels where nothing was
-/// rendered (alpha still 0 after scene render), preserving the pet's
-/// visible pixels.
-///
-/// The shader uses ColorMask A + Blend to set alpha=0 everywhere, then
-/// Live2D's own alpha (>0) in pet pixels is preserved because we run
-/// BEFORE the engine's own final blit in the OnPostRender callback order.
-///
-/// Attach to the same GameObject as Camera.main.
-/// </summary>
 [RequireComponent(typeof(Camera))]
 public class AlphaBackground : MonoBehaviour
 {
 #if UNITY_STANDALONE_OSX && !UNITY_EDITOR
-    private Material _mat;
-    private Mesh     _quad;
+    private Camera _cam;
 
     private void Awake()
     {
-        var shader = Resources.Load<Shader>("AlphaBackground");
-        if (shader == null)
-        {
-            Debug.LogError("[AlphaBackground] Resources/AlphaBackground.shader not found.");
-            enabled = false;
-            return;
-        }
-        Debug.Log("[AlphaBackground] Shader loaded OK: " + shader.name);
-        _mat = new Material(shader);
-        _mat.hideFlags = HideFlags.HideAndDontSave;
+        _cam = GetComponent<Camera>();
+        // Use Depth clear so Unity doesn't overwrite the GL.Clear we do in OnPreRender
+        _cam.clearFlags = CameraClearFlags.Depth;
+        Debug.Log("[AlphaBackground] Awake: set clearFlags=Depth");
+    }
 
-        // Full-screen quad in clip space (z=0, w=1 for correct pass-through)
-        _quad = new Mesh();
-        _quad.vertices = new Vector3[]
-        {
-            new Vector3(-1f, -1f, 0f),
-            new Vector3(-1f,  1f, 0f),
-            new Vector3( 1f,  1f, 0f),
-            new Vector3( 1f, -1f, 0f),
-        };
-        _quad.triangles = new int[] { 0, 1, 2, 0, 2, 3 };
-        _quad.bounds = new Bounds(Vector3.zero, Vector3.one * 1e9f); // prevent frustum culling
-        _quad.hideFlags = HideFlags.HideAndDontSave;
-        Debug.Log("[AlphaBackground] Awake complete, OnPostRender will run each frame.");
+    private void OnPreRender()
+    {
+        // Manually clear color (RGBA=0,0,0,0) + depth each frame.
+        // GL.Clear writes alpha=0 into the Metal framebuffer loadAction,
+        // which is what preserveFramebufferAlpha=1 needs to show transparency.
+        GL.Clear(true, true, new Color(0f, 0f, 0f, 0f));
     }
 
     private int _frameCount = 0;
     private void OnPostRender()
     {
-        if (_mat == null || _quad == null) return;
         _frameCount++;
-
-        // Log first frame, then every 300 frames
         if (_frameCount == 1 || _frameCount % 300 == 0)
-        {
-            var cam = GetComponent<Camera>();
-            Debug.Log($"[AlphaBackground] frame={_frameCount} OnPostRender OK" +
-                $" | cam.clearFlags={cam.clearFlags}" +
-                $" | cam.backgroundColor={cam.backgroundColor}" +
-                $" | cam.allowHDR={cam.allowHDR}" +
-                $" | mat={_mat != null}" +
-                $" | shader={_mat?.shader?.name}");
-        }
-
-        _mat.SetPass(0);
-        Graphics.DrawMeshNow(_quad, Matrix4x4.identity);
-
-        if (_frameCount == 1)
-            Debug.Log("[AlphaBackground] DrawMeshNow called — alpha=0 quad drawn.");
-    }
-
-    private void OnDestroy()
-    {
-        if (_mat  != null) Destroy(_mat);
-        if (_quad != null) Destroy(_quad);
+            Debug.Log($"[AlphaBackground] frame={_frameCount} clearFlags={_cam.clearFlags}");
     }
 #endif
 }
