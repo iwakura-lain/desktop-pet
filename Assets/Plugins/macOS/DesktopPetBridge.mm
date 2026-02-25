@@ -132,7 +132,10 @@ static void TryApplyTransparencyWithRetry(int attempt, int maxAttempts)
     NSWindow* win = GetUnityWindow();
     if (win)
     {
-        ApplyTransparencyToWindow(win);
+        // Defer layer mutations out of any active CATransaction flush
+        dispatch_async(dispatch_get_main_queue(), ^{
+            ApplyTransparencyToWindow(win);
+        });
         return;
     }
     if (attempt >= maxAttempts) return;
@@ -155,13 +158,18 @@ static void TryApplyTransparencyWithRetry(int attempt, int maxAttempts)
 
     // NSWindowDidOrderOnScreenNotification fires when any window becomes visible,
     // including click-through windows that never become key/main.
+    // Use dispatch_async to defer layer mutations out of the CATransaction flush.
     [[NSNotificationCenter defaultCenter]
         addObserverForName:@"NSWindowDidOrderOnScreenNotification"
         object:nil
         queue:[NSOperationQueue mainQueue]
         usingBlock:^(NSNotification* n) {
             NSWindow* win = n.object;
-            if (win) ApplyTransparencyToWindow(win);
+            if (win) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    ApplyTransparencyToWindow(win);
+                });
+            }
         }];
 
     // Also start a retry loop from launch in case the window is already visible.
