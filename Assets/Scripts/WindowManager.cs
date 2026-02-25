@@ -96,14 +96,15 @@ public class WindowManager : MonoBehaviour
         var cam = Camera.main;
         if (cam != null)
         {
-            cam.clearFlags      = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
             Debug.Log($"[WM] Start: cam.clearFlags={cam.clearFlags} backgroundColor={cam.backgroundColor}");
 
 #if UNITY_STANDALONE_OSX && !UNITY_EDITOR
-            // AlphaBackground handles the actual transparent clear via GL.Clear in OnPreRender
+            // AlphaBackground sets clearFlags=Nothing and does GL.Clear(alpha=0) in OnPreRender
             if (cam.GetComponent<AlphaBackground>() == null)
                 cam.gameObject.AddComponent<AlphaBackground>();
+#else
+            cam.clearFlags = CameraClearFlags.SolidColor;
 #endif
         }
         else
