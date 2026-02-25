@@ -161,13 +161,22 @@ public class WindowManager : MonoBehaviour
         int sw = MacOS_GetScreenWidth();
         int sh = MacOS_GetScreenHeight();
         Debug.Log($"[WM] macOS screen={sw}x{sh}");
+
+        // Apply transparency BEFORE SetResolution to catch the initial window
+        MacOS_ApplyWindowStyle();
+        Debug.Log("[WM] macOS MacOS_ApplyWindowStyle() called (pre-resize)");
+
         Screen.SetResolution(sw, sh, false);
         yield return null;
         MacOS_MoveWindow(0, 0, sw, sh);
         Debug.Log($"[WM] macOS MoveWindow(0,0,{sw},{sh}) done");
 
+        // Wait several frames for Metal to finish RecreateSurface after SetResolution,
+        // then re-apply transparency so the new CAMetalLayer is also transparent.
+        for (int i = 0; i < 5; i++) yield return null;
         MacOS_ApplyWindowStyle();
-        Debug.Log("[WM] macOS MacOS_ApplyWindowStyle() called");
+        Debug.Log("[WM] macOS MacOS_ApplyWindowStyle() called (post-RecreateSurface)");
+
         MacOS_SetIgnoreMouse(true);  // start click-through
 
         // Log camera state after init
@@ -176,7 +185,6 @@ public class WindowManager : MonoBehaviour
             Debug.Log($"[WM] post-init cam.clearFlags={cam.clearFlags} bg={cam.backgroundColor} allowHDR={cam.allowHDR} targetTexture={cam.targetTexture}");
 
         // Scale the Pet GameObject to make it larger on macOS.
-        // Find the "Pet" object (created by PetBootstrap).
         var pet = GameObject.Find("Pet");
         if (pet != null)
             pet.transform.localScale = Vector3.one * macOSPetScale;

@@ -98,6 +98,8 @@ static void TryApplyWithRetry(int attempt, int maxAttempts)
 + (void)load
 {
     DiagLog(@"[LOAD] +load called");
+
+    // Re-apply transparency when window becomes key (initial show)
     [[NSNotificationCenter defaultCenter]
         addObserverForName:NSWindowDidBecomeKeyNotification
         object:nil
@@ -106,6 +108,20 @@ static void TryApplyWithRetry(int attempt, int maxAttempts)
             NSWindow* win = n.object;
             if (win) ApplyTransparencyToWindow(win);
         }];
+
+    // Re-apply after Metal RecreateSurface — fires when backing scale or
+    // size changes (e.g. after Screen.SetResolution), which creates a new
+    // CAMetalLayer that resets opaque=YES.
+    [[NSNotificationCenter defaultCenter]
+        addObserverForName:NSWindowDidChangeBackingPropertiesNotification
+        object:nil
+        queue:[NSOperationQueue mainQueue]
+        usingBlock:^(NSNotification* n) {
+            NSWindow* win = n.object;
+            DiagLog([NSString stringWithFormat:@"[BACKING] NSWindowDidChangeBackingProperties win=%@", win]);
+            if (win) ApplyTransparencyToWindow(win);
+        }];
+
     [[NSNotificationCenter defaultCenter]
         addObserverForName:NSApplicationDidFinishLaunchingNotification
         object:nil
