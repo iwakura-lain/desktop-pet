@@ -96,16 +96,21 @@ public class WindowManager : MonoBehaviour
         var cam = Camera.main;
         if (cam != null)
         {
-            // Both platforms: transparent black background.
-            // On macOS, MTKView layer is set transparent in MacOS_ApplyWindowStyle
-            // so this SolidColor (alpha=0) punches through to the desktop.
+            // macOS: use Depth Only so Unity does NOT clear the color buffer.
+            // With NSWindow opaque=NO + preserveFramebufferAlpha=1, the Metal
+            // layer's transparent pixels show the desktop underneath.
+            // SolidColor clear writes alpha=1 in Metal's loadAction even when
+            // backgroundColor.a=0, which is why the background stays black.
+#if UNITY_STANDALONE_OSX && !UNITY_EDITOR
+            cam.clearFlags      = CameraClearFlags.Depth;
+            cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+#else
             cam.clearFlags      = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+#endif
             Debug.Log($"[WM] Start: cam.clearFlags={cam.clearFlags} backgroundColor={cam.backgroundColor}");
 
 #if UNITY_STANDALONE_OSX && !UNITY_EDITOR
-            // Add AlphaBackground to force alpha=0 in background pixels after
-            // each frame, overriding Unity's built-in pipeline alpha overwrite.
             if (cam.GetComponent<AlphaBackground>() == null)
                 cam.gameObject.AddComponent<AlphaBackground>();
             Debug.Log($"[WM] AlphaBackground component: {cam.GetComponent<AlphaBackground>() != null}");
