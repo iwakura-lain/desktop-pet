@@ -36,7 +36,7 @@ public class AlphaBackground : MonoBehaviour
         _mat = new Material(shader);
         _mat.hideFlags = HideFlags.HideAndDontSave;
 
-        // Full-screen quad in clip space
+        // Full-screen quad in clip space (z=0, w=1 for correct pass-through)
         _quad = new Mesh();
         _quad.vertices = new Vector3[]
         {
@@ -46,6 +46,7 @@ public class AlphaBackground : MonoBehaviour
             new Vector3( 1f, -1f, 0f),
         };
         _quad.triangles = new int[] { 0, 1, 2, 0, 2, 3 };
+        _quad.bounds = new Bounds(Vector3.zero, Vector3.one * 1e9f); // prevent frustum culling
         _quad.hideFlags = HideFlags.HideAndDontSave;
         Debug.Log("[AlphaBackground] Awake complete, OnPostRender will run each frame.");
     }
