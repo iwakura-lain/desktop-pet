@@ -106,14 +106,11 @@ static void ApplyTransparencyToWindow(NSWindow* win)
         if ([v.layer isKindOfClass:[CAMetalLayer class]])
         {
             CAMetalLayer* ml = (CAMetalLayer*)v.layer;
-            DiagLog([NSString stringWithFormat:@"[METAL] found CAMetalLayer pixFmt=%lu opaque_before=%d",
-                (unsigned long)ml.pixelFormat, (int)ml.isOpaque]);
-            ml.pixelFormat     = MTLPixelFormatBGRA8Unorm_sRGB;
-            // Note: setOpaque: is swizzled above so this always becomes NO
-            ml.opaque          = NO;
-            ml.framebufferOnly = NO;
-            DiagLog([NSString stringWithFormat:@"[METAL] after patch: pixFmt=%lu opaque=%d framebufferOnly=%d",
-                (unsigned long)ml.pixelFormat, (int)ml.isOpaque, (int)ml.framebufferOnly]);
+            DiagLog([NSString stringWithFormat:@"[METAL] found CAMetalLayer opaque_before=%d", (int)ml.isOpaque]);
+            // Only set opaque=NO. Do NOT touch pixelFormat or framebufferOnly:
+            // changing those during a CATransaction flush crashes the app.
+            ml.opaque = NO;
+            DiagLog([NSString stringWithFormat:@"[METAL] after patch: opaque=%d", (int)ml.isOpaque]);
         }
 
         for (NSView* child in v.subviews)
