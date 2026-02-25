@@ -160,24 +160,14 @@ public class WindowManager : MonoBehaviour
 #if UNITY_STANDALONE_OSX && !UNITY_EDITOR
     private IEnumerator InitWindowDelayed()
     {
-        // Wait 1 frame for Unity to finish initialization, then apply immediately.
+        // Wait 1 frame for Unity to finish initialization
         yield return null;
 
-        int sw = MacOS_GetScreenWidth();
-        int sh = MacOS_GetScreenHeight();
-        Debug.Log($"[WM] macOS screen={sw}x{sh}");
-
-        // Apply transparency BEFORE SetResolution to catch the initial window
+        // Apply transparency BEFORE anything else
         MacOS_ApplyWindowStyle();
         Debug.Log("[WM] macOS MacOS_ApplyWindowStyle() called (pre-resize)");
 
-        Screen.SetResolution(sw, sh, false);
-        yield return null;
-        MacOS_MoveWindow(0, 0, sw, sh);
-        Debug.Log($"[WM] macOS MoveWindow(0,0,{sw},{sh}) done");
-
-        // Wait several frames for Metal to finish RecreateSurface after SetResolution,
-        // then re-apply transparency so the new CAMetalLayer is also transparent.
+        // Wait for Metal RecreateSurface to finish, then re-apply
         for (int i = 0; i < 5; i++) yield return null;
         MacOS_ApplyWindowStyle();
         Debug.Log("[WM] macOS MacOS_ApplyWindowStyle() called (post-RecreateSurface)");
@@ -187,14 +177,16 @@ public class WindowManager : MonoBehaviour
         // Log camera state after init
         var cam = Camera.main;
         if (cam != null)
-            Debug.Log($"[WM] post-init cam.clearFlags={cam.clearFlags} bg={cam.backgroundColor} allowHDR={cam.allowHDR} targetTexture={cam.targetTexture}");
+            Debug.Log($"[WM] post-init cam.clearFlags={cam.clearFlags} bg={cam.backgroundColor}");
 
-        // Scale the Pet GameObject to make it larger on macOS.
+        // Scale the Pet GameObject
         var pet = GameObject.Find("Pet");
         if (pet != null)
             pet.transform.localScale = Vector3.one * macOSPetScale;
 
-        Debug.Log($"[WM] macOS {sw}x{sh} petScale={macOSPetScale}");
+        int sw = MacOS_GetScreenWidth();
+        int sh = MacOS_GetScreenHeight();
+        Debug.Log($"[WM] macOS screen={sw}x{sh} petScale={macOSPetScale}");
     }
 #endif
 
