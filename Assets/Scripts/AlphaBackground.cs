@@ -13,17 +13,13 @@ public class AlphaBackground : MonoBehaviour
 
     private void Start()
     {
-        // Set in Start (not Awake) so we run after WindowManager.Start()
-        // which may set clearFlags=SolidColor — we must override it last.
-        _cam.clearFlags = CameraClearFlags.Nothing;
-        Debug.Log("[AlphaBackground] Start: set clearFlags=Nothing");
-    }
-
-    private void OnPreRender()
-    {
-        // With clearFlags=Nothing Unity skips its internal Metal clear entirely.
-        // GL.Clear here is the only clear — writes RGBA=(0,0,0,0) + depth reset.
-        GL.Clear(true, true, new Color(0f, 0f, 0f, 0f));
+        // UniWindowController confirms: SolidColor + Color.clear is correct for Built-in pipeline.
+        // Must set in Start (after WindowManager.Start) to avoid being overwritten.
+        _cam.clearFlags = CameraClearFlags.SolidColor;
+        _cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+        _cam.allowHDR = false;
+        _cam.allowMSAA = false;
+        Debug.Log($"[AlphaBackground] Start: clearFlags={_cam.clearFlags} bg={_cam.backgroundColor} HDR={_cam.allowHDR} MSAA={_cam.allowMSAA}");
     }
 
     private int _frameCount = 0;
@@ -31,7 +27,7 @@ public class AlphaBackground : MonoBehaviour
     {
         _frameCount++;
         if (_frameCount == 1 || _frameCount % 300 == 0)
-            Debug.Log($"[AlphaBackground] frame={_frameCount} clearFlags={_cam.clearFlags}");
+            Debug.Log($"[AlphaBackground] frame={_frameCount} clearFlags={_cam.clearFlags} bg={_cam.backgroundColor}");
     }
 #endif
 }

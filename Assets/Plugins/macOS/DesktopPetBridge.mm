@@ -36,21 +36,29 @@ static void DiagLog(NSString* msg)
 }
 
 // ---------------------------------------------------------------------------
-// Apply transparency — NSWindow level only, no layer traversal
+// Apply transparency — NSWindow + contentView layer (from UniWindowController)
 // ---------------------------------------------------------------------------
 static void ApplyTransparencyToWindow(NSWindow* win)
 {
     if (!win) return;
-    DiagLog([NSString stringWithFormat:@"[APPLY] opaque_before=%d bg=%@ styleMask=%lu level=%ld",
-        (int)[win isOpaque],
-        [win backgroundColor],
-        (unsigned long)[win styleMask],
-        (long)[win level]]);
+
+    // 1. NSWindow level
     [win setOpaque:NO];
     [win setBackgroundColor:[NSColor clearColor]];
     [win setHasShadow:NO];
-    DiagLog([NSString stringWithFormat:@"[APPLY] opaque_after=%d hasShadow=%d",
-        (int)[win isOpaque], (int)[win hasShadow]]);
+
+    // 2. contentView layer level — this is what actually makes Metal render transparently.
+    //    Unity's CAMetalLayer sits as a sublayer of the contentView layer, so setting
+    //    isOpaque=NO + backgroundColor=clear here propagates to the Metal layer.
+    NSView* view = [win contentView];
+    if (view) {
+        view.wantsLayer = YES;
+        view.layer.backgroundColor = CGColorGetConstantColor(kCGColorClear);
+        view.layer.opaque = NO;
+    }
+
+    DiagLog([NSString stringWithFormat:@"[APPLY] isOpaque=%d contentView.layer.opaque=%d",
+        (int)[win isOpaque], (int)(view ? view.layer.opaque : -1)]);
 }
 
 // ---------------------------------------------------------------------------
